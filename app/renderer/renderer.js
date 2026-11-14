@@ -28,8 +28,8 @@
   island.addEventListener('click', e => { if (Date.now() - dragEnd < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   island.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) setState(g.dataset.go); });
 
-  function toast(text, ms) {
-    $('#toastText').textContent = text; setState('toast');
+  function toast(text, ms, who) {
+    $('#toastText').textContent = text; $('#toastWho').textContent = who || ''; setState('toast');
     clearTimeout(toastT); toastT = setTimeout(() => setState(hover ? 'hub' : 'idle'), ms || 2600);
   }
 
@@ -64,7 +64,46 @@
     island.dataset.anchor = l.anchor;
     island.style.setProperty('--il', l.insetL + 'px');
     island.style.setProperty('--ir', l.insetR + 'px');
+    geo = Object.assign(geo || {}, l);
+    if (!geo.win || !geo.display) return;
+    placeGlass(); setTimeout(placeGlass, 600);
+    if (glassOn && geo.display.id !== glassDisplay) startGlass();
   });
+  api.on('winpos', p => { if (geo) { geo.win.x = p.x; geo.win.y = p.y; placeGlass(); } });
+
+  // ---------- Milchglas ----------
+  // Ein kleines Live-Bild des Bildschirms liegt unscharf hinter der Insel und wird so verschoben,
+  // dass es genau zu dem passt, was wirklich dahinter ist.
+  const M = 24, gv = $('#gv');
+  let geo = null, glassOn = false, glassDisplay = null, glassStream = null;
+  function placeGlass() {
+    if (!geo || !geo.win || !geo.display) return;
+    const r = island.getBoundingClientRect();
+    const cx = geo.win.x + r.left + r.width / 2;
+    const ay = geo.anchor === 'bottom' ? geo.win.y + geo.win.h - M : geo.win.y + M;
+    const s = island.style;
+    s.setProperty('--vx', (geo.display.x - cx) + 'px'); s.setProperty('--vy', (geo.display.y - ay) + 'px');
+    s.setProperty('--vw', geo.display.width + 'px'); s.setProperty('--vh', geo.display.height + 'px');
+  }
+  function stopGlass() {
+    if (glassStream) glassStream.getTracks().forEach(t => t.stop());
+    glassStream = null; glassDisplay = null; gv.srcObject = null;
+    $('#glass').hidden = true; island.classList.remove('glassy');
+  }
+  async function startGlass() {
+    if (!geo || !geo.display) return;
+    const want = geo.display.id;
+    stopGlass();
+    if (!glassOn) return;
+    try {
+      const id = await api.glassSource(want);
+      if (!id || !glassOn) return;
+      glassStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: id, maxWidth: 640, maxHeight: 400, maxFrameRate: 24 } } });
+      glassDisplay = want; gv.srcObject = glassStream; await gv.play();
+      $('#glass').hidden = false; island.classList.add('glassy'); placeGlass();
+    } catch (_) { stopGlass(); }
+  }
+  function setGlass(on) { glassOn = on; if (on) startGlass(); else stopGlass(); }
 
   // ---------- Programme ----------
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -152,6 +191,23 @@
   }
   toggle('#tTaskbar', api.setHideTaskbar);
   toggle('#tAuto', api.setAutostart);
+  toggle('#tGlass', on => { api.setGlass(on); setTimeout(() => setGlass(on), 150); });
+  toggle('#tFrames', api.setFrames);
+  toggle('#tLight', api.setTheme);
+  $('#bIcons').addEventListener('click', () => api.deskIcons());
+  $('#bWall').addEventListener('click', () => { setState('idle'); api.wallpaper(); });
+
+  // ---------- Mitteilungen ----------
+  toggle('#tNotify', api.setNotify);
+  function showNotifyState(n) {
+    $('#tNotify').setAttribute('aria-pressed', !!n.on);
+    $('#nList').innerHTML = n.apps.map(a => '<button class="tog" data-app="' + esc(a.name) + '" aria-pressed="' + !!a.on + '">' + esc(a.name) + '</button>').join('');
+    if (n.apps.length) $('#nHint').textContent = 'Tippe ein Programm an, um seine Mitteilungen ab- oder anzuschalten.';
+  }
+  $('#nList').addEventListener('click', e => {
+    const b = e.target.closest('[data-app]');
+    if (b) api.setNotifyApp(b.dataset.app, b.getAttribute('aria-pressed') !== 'true');
+  });
   $('#quit').addEventListener('click', () => api.quit());
 
   // ---------- Timer ----------
@@ -178,11 +234,20 @@
       lastVol = key;
     }
     else if (ev.t === 'toast') toast(ev.m);
+    else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
+    else if (ev.t === 'notifyState') showNotifyState(ev);
+    else if (ev.t === 'notifAccess') { if (!ev.ok) $('#nHint').textContent = 'Windows gibt die Mitteilungen noch nicht frei. Erlaube den Zugriff unter Einstellungen → Datenschutz und Sicherheit → Benachrichtigungen.'; }
+    else if (ev.t === 'theme') $('#tLight').setAttribute('aria-pressed', !!ev.light);
+    else if (ev.t === 'visible') { if (glassOn) { if (ev.on) startGlass(); else stopGlass(); } }
   });
 
   api.ready().then(s => {
     $('#tTaskbar').setAttribute('aria-pressed', !!s.hideTaskbar);
     $('#tAuto').setAttribute('aria-pressed', !!s.autostart);
+    $('#tGlass').setAttribute('aria-pressed', !!s.glass);
+    $('#tFrames').setAttribute('aria-pressed', !!s.frames);
+    showNotifyState(s.notify);
+    glassOn = !!s.glass; if (glassOn) setTimeout(startGlass, 300);
   });
   showMedia();
 })();

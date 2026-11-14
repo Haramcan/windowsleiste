@@ -34,13 +34,22 @@ jobs:
         working-directory: app
         run: npm run dist
 
+      - name: Helfer einzeln testen
+        shell: bash
+        run: |
+          (sleep 6; echo '{"c":"notify","on":true}'; sleep 4) | app/helper-bin/InselHelper.exe 1 > helper-out.txt 2> helper-err.txt || true
+          cut -c1-300 helper-out.txt | head -40
+          cat helper-err.txt
+          grep -q '"t":"hello"' helper-out.txt
+          grep -q '"t":"windows"' helper-out.txt
+
       - name: Probelauf unter Windows
         working-directory: app
         shell: bash
         run: |
           mkdir -p shots
           INSEL_SHOT=shots INSEL_REAL=1 timeout 120 npx electron . || true
-          cat shots/helper.log
+          sort shots/helper.log | uniq -c
           ls shots/idle.png shots/hub.png shots/music.png
           grep -q "helper: windows" shots/helper.log
           grep -q "helper: media" shots/helper.log || echo "::warning::Keine Musik-Daten im Probelauf"

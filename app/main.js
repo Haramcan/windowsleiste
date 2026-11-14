@@ -1,6 +1,6 @@
 // Insel-Leiste: Hauptprozess. Ein durchsichtiges, immer sichtbares Fenster zeigt die Insel;
 // ein kleiner Helfer (helper/InselHelper.exe) liefert Musik, Lautstärke und offene Fenster.
-const { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -11,7 +11,7 @@ const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, hideTaskbar: false };
+let cfg = { pins: [], pos: null, hideTaskbar: true, glass: true, frames: false, notify: { on: true, off: [] }, notifyApps: [] };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
 const iconCache = new Map();
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -19,6 +19,8 @@ const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
   try { cfg = Object.assign(cfg, JSON.parse(fs.readFileSync(cfgFile(), 'utf8'))); } catch (_) {}
   if (!Array.isArray(cfg.pins)) cfg.pins = [];
+  if (!cfg.notify || !Array.isArray(cfg.notify.off)) cfg.notify = { on: true, off: [] };
+  if (!Array.isArray(cfg.notifyApps)) cfg.notifyApps = [];
 }
 function saveCfg() {
   try { fs.mkdirSync(path.dirname(cfgFile()), { recursive: true }); fs.writeFileSync(cfgFile(), JSON.stringify(cfg, null, 2)); } catch (_) {}
@@ -34,7 +36,7 @@ function defaultPos() {
 function applyPos() {
   if (!cfg.pos) cfg.pos = defaultPos();
   const p = cfg.pos;
-  const d = screen.getDisplayNearestPoint({ x: p.cx, y: p.y }).bounds;
+  const disp = screen.getDisplayNearestPoint({ x: p.cx, y: p.y }), d = disp.bounds;
   p.cx = Math.min(Math.max(p.cx, d.x + IDLE_W / 2 + 8), d.x + d.width - IDLE_W / 2 - 8);
   p.y = Math.min(Math.max(p.y, d.y + 4), d.y + d.height - 4);
   const x = Math.round(p.cx - WIN_W / 2);
@@ -43,7 +45,9 @@ function applyPos() {
   send('layout', {
     anchor: p.anchor,
     insetL: Math.max(0, d.x - x),
-    insetR: Math.max(0, x + WIN_W - (d.x + d.width))
+    insetR: Math.max(0, x + WIN_W - (d.x + d.width)),
+    win: { x, y, w: WIN_W, h: WIN_H },
+    display: { id: String(disp.id), x: d.x, y: d.y, width: d.width, height: d.height }
   });
 }
 
@@ -112,6 +116,12 @@ function startHelper() {
   const file = helperPath();
   if (process.platform !== 'win32' || !fs.existsSync(file)) return;
   helper = spawn(file, [String(process.pid)], { windowsHide: true });
+  if (process.env.INSEL_SHOT) {
+    const log = t => { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), t + '\n'); } catch (_) {} };
+    log('gestartet: ' + file);
+    helper.stderr.on('data', d => log('stderr: ' + d));
+    helper.on('exit', code => log('beendet mit Code ' + code));
+  }
   helper.on('error', () => { helper = null; });
   helper.on('exit', () => { helper = null; if (!quitting) setTimeout(startHelper, 2000); });
   readline.createInterface({ input: helper.stdout }).on('line', line => {
@@ -121,11 +131,20 @@ function startHelper() {
     else if (ev.t === 'fullscreen') {
       hiddenForFullscreen = !!ev.on;
       if (win && !win.isDestroyed()) { if (ev.on) win.hide(); else win.showInactive(); }
+      send('ev', { t: 'visible', on: !ev.on });
+    }
+    else if (ev.t === 'notif') {
+      const name = ev.app || 'Unbekannt';
+      if (!cfg.notifyApps.includes(name)) { cfg.notifyApps.push(name); saveCfg(); send('ev', notifyState()); }
+      if (cfg.notify.on && !cfg.notify.off.includes(name)) send('ev', ev);
     }
     else send('ev', ev);
   });
   if (cfg.hideTaskbar) sendHelper({ c: 'taskbar', hide: true });
+  if (cfg.frames) sendHelper({ c: 'frames', on: true });
+  sendHelper({ c: 'notify', on: !!cfg.notify.on });
 }
+const notifyState = () => ({ t: 'notifyState', on: !!cfg.notify.on, apps: cfg.notifyApps.map(n => ({ name: n, on: !cfg.notify.off.includes(n) })) });
 
 // ---------- Fenster ----------
 function createWindow() {
@@ -137,6 +156,7 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
+  win.setContentProtection(!!cfg.glass);   // die Insel selbst taucht in der Aufnahme für das Milchglas nicht auf
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => { applyPos(); if (!hiddenForFullscreen) win.showInactive(); });
   screen.on('display-metrics-changed', applyPos);
@@ -145,7 +165,32 @@ function createWindow() {
 
 ipcMain.handle('ready', () => {
   setImmediate(() => { applyPos(); pushApps(); });
-  return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M };
+  return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
+           glass: !!cfg.glass, frames: !!cfg.frames, notify: notifyState() };
+});
+
+// Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
+ipcMain.handle('glass-source', async (_e, displayId) => {
+  if (!cfg.glass) return null;
+  try {
+    const list = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
+    const s = list.find(x => String(x.display_id) === String(displayId)) || list[0];
+    return s ? s.id : null;
+  } catch (_) { return null; }
+});
+ipcMain.on('set-glass', (_e, b) => { cfg.glass = !!b; saveCfg(); win.setContentProtection(cfg.glass); });
+ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });
+ipcMain.on('set-theme', (_e, light) => sendHelper({ c: 'theme', light: !!light }));
+ipcMain.on('desk-icons', () => sendHelper({ c: 'deskicons' }));
+ipcMain.on('wallpaper', async () => {
+  const r = await dialog.showOpenDialog({ title: 'Hintergrundbild wählen', properties: ['openFile'], filters: [{ name: 'Bilder', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'webp'] }] });
+  if (!r.canceled && r.filePaths[0]) sendHelper({ c: 'wallpaper', path: r.filePaths[0] });
+});
+ipcMain.on('set-notify', (_e, b) => { cfg.notify.on = !!b; saveCfg(); sendHelper({ c: 'notify', on: cfg.notify.on }); send('ev', notifyState()); });
+ipcMain.on('set-notify-app', (_e, { name, on }) => {
+  cfg.notify.off = cfg.notify.off.filter(n => n !== name);
+  if (!on) cfg.notify.off.push(name);
+  saveCfg(); send('ev', notifyState());
 });
 ipcMain.on('ignore', (_e, b) => { if (!drag) win.setIgnoreMouseEvents(!!b, { forward: true }); });
 ipcMain.on('helper', (_e, cmd) => {
@@ -184,7 +229,9 @@ ipcMain.on('drag-start', () => {
 ipcMain.on('drag-move', () => {
   if (!drag) return;
   const c = screen.getCursorScreenPoint();
-  win.setBounds({ x: drag.x + c.x - drag.cx, y: drag.y + c.y - drag.cy, width: WIN_W, height: WIN_H });
+  const x = drag.x + c.x - drag.cx, y = drag.y + c.y - drag.cy;
+  win.setBounds({ x, y, width: WIN_W, height: WIN_H });
+  send('winpos', { x, y });
 });
 ipcMain.on('drag-end', (_e, rect) => {
   if (!drag) return;
@@ -210,6 +257,7 @@ else {
   app.on('before-quit', () => {
     quitting = true;
     sendHelper({ c: 'taskbar', hide: false });
+    sendHelper({ c: 'frames', on: false });
     if (helper) { try { helper.stdin.end(); } catch (_) {} }
   });
   app.on('window-all-closed', () => app.quit());

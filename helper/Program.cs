@@ -3,11 +3,16 @@
 //   Ereignisse: media, thumb, volume, windows, fullscreen, error
 //   Befehle:    {"c":"media","a":"toggle|next|prev"}  {"c":"volume","v":0.5}  {"c":"mute"}
 //               {"c":"activate","h":123}  {"c":"taskbar","hide":true}  {"c":"start"}
+//               {"c":"theme","light":true}  {"c":"deskicons"}  {"c":"wallpaper","path":"..."}
+//               {"c":"frames","on":true}  {"c":"notify","on":true}
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
+using Windows.UI.Notifications;
+using Windows.UI.Notifications.Management;
 
 namespace InselHelper;
 
@@ -16,28 +21,33 @@ internal static class Program
     private static readonly object OutLock = new();
     private static uint hostPid;
 
+    // Eigene Datenströme statt Console.*: Das Programm hat kein Konsolenfenster.
+    private static readonly StreamWriter Out = new(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+
     private static void Emit(object o)
     {
         var line = JsonSerializer.Serialize(o);
-        lock (OutLock) { Console.Out.WriteLine(line); Console.Out.Flush(); }
+        lock (OutLock) { try { Out.WriteLine(line); } catch { } }
     }
 
     private static void Main(string[] args)
     {
-        Console.OutputEncoding = new UTF8Encoding(false);
-        Console.InputEncoding = new UTF8Encoding(false);
         if (args.Length > 0) uint.TryParse(args[0], out hostPid);
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => Taskbar.Set(false);
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => { Taskbar.Set(false); Frames.Set(false); };
+        var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
+        Emit(new { t = "hello" });
 
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => { try { Emit(new { t = "error", m = "fatal: " + e.ExceptionObject }); } catch { } };
         new Thread(PollLoop) { IsBackground = true }.Start();
 
         string? line;
-        while ((line = Console.ReadLine()) != null)
+        while ((line = input.ReadLine()) != null)
         {
             try { Handle(line); }
             catch (Exception e) { Emit(new { t = "error", m = e.Message }); }
         }
         Taskbar.Set(false);   // Insel wurde beendet: alte Taskleiste wieder zeigen
+        Frames.Set(false);
     }
 
     private static void Handle(string line)
@@ -52,12 +62,17 @@ internal static class Program
             case "activate": WindowList.Activate(new IntPtr(r.GetProperty("h").GetInt64())); break;
             case "taskbar": Taskbar.Set(r.GetProperty("hide").GetBoolean()); break;
             case "start": Native.keybd_event(0x5B, 0, 0, UIntPtr.Zero); Native.keybd_event(0x5B, 0, 2, UIntPtr.Zero); break;
+            case "theme": Look.SetLight(r.GetProperty("light").GetBoolean()); break;
+            case "deskicons": Look.ToggleDesktopIcons(); break;
+            case "wallpaper": Look.SetWallpaper(r.GetProperty("path").GetString() ?? ""); break;
+            case "frames": Frames.Set(r.GetProperty("on").GetBoolean()); break;
+            case "notify": Notifications.Enabled = r.GetProperty("on").GetBoolean(); break;
         }
     }
 
     private static void PollLoop()
     {
-        string lastWindows = "", lastVolume = "";
+        string lastWindows = "", lastVolume = "", lastTheme = "";
         bool lastFull = false;
         int n = 0;
         while (true)
@@ -76,7 +91,15 @@ internal static class Program
                 }
 
                 Taskbar.KeepHidden();
-                if (n++ % 2 == 0) Media.Poll(Emit).GetAwaiter().GetResult();
+                Frames.Apply(list.Select(x => new IntPtr(x.h)));
+                if (n % 2 == 0) Media.Poll(Emit).GetAwaiter().GetResult();
+                if (n % 3 == 0) Notifications.Poll(Emit).GetAwaiter().GetResult();
+                if (n % 4 == 0)
+                {
+                    var th = Look.IsLight() ? "light" : "dark";
+                    if (th != lastTheme) { lastTheme = th; Emit(new { t = "theme", light = th == "light" }); }
+                }
+                n++;
             }
             catch (Exception e) { Emit(new { t = "error", m = e.Message }); }
             Thread.Sleep(500);
@@ -151,6 +174,133 @@ internal static class Media
             case "next": await s.TrySkipNextAsync(); break;
             case "prev": await s.TrySkipPreviousAsync(); break;
         }
+    }
+}
+
+// ---------- Mitteilungen anderer Programme ----------
+internal static class Notifications
+{
+    public static bool Enabled;
+    private static UserNotificationListener? listener;
+    private static bool allowed, primed;
+    private static DateTime retryAt = DateTime.MinValue;
+    private static HashSet<uint> seen = new();
+
+    public static async Task Poll(Action<object> emit)
+    {
+        if (!Enabled) return;
+        if (!allowed)
+        {
+            if (DateTime.UtcNow < retryAt) return;
+            retryAt = DateTime.UtcNow.AddSeconds(30);
+            try
+            {
+                listener = UserNotificationListener.Current;
+                allowed = await listener.RequestAccessAsync() == UserNotificationListenerAccessStatus.Allowed;
+                emit(new { t = "notifAccess", ok = allowed, m = "" });
+            }
+            catch (Exception e) { emit(new { t = "notifAccess", ok = false, m = e.Message }); }
+            if (!allowed) return;
+        }
+        var list = await listener!.GetNotificationsAsync(NotificationKinds.Toast);
+        var now = new HashSet<uint>();
+        foreach (var n in list)
+        {
+            now.Add(n.Id);
+            if (seen.Contains(n.Id) || !primed) continue;      // beim ersten Durchlauf nur merken, nichts melden
+            string app = "", title = "", body = "";
+            try { app = n.AppInfo?.DisplayInfo?.DisplayName ?? ""; } catch { }
+            try
+            {
+                var texts = n.Notification?.Visual?.GetBinding(KnownNotificationBindings.ToastGeneric)?.GetTextElements();
+                if (texts != null)
+                {
+                    var parts = texts.Select(x => x.Text ?? "").Where(x => x.Length > 0).ToList();
+                    if (parts.Count > 0) title = parts[0];
+                    if (parts.Count > 1) body = string.Join(" ", parts.Skip(1));
+                }
+            }
+            catch { }
+            if (app.Length + title.Length + body.Length > 0) emit(new { t = "notif", app, title, body });
+        }
+        seen = now; primed = true;
+    }
+}
+
+// ---------- Aussehen von Windows ----------
+internal static class Look
+{
+    private const string Key = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+
+    public static bool IsLight()
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(Key);
+        return k?.GetValue("AppsUseLightTheme") is int v && v != 0;
+    }
+
+    public static void SetLight(bool light)
+    {
+        using (var k = Registry.CurrentUser.CreateSubKey(Key))
+        {
+            k.SetValue("AppsUseLightTheme", light ? 1 : 0, RegistryValueKind.DWord);
+            k.SetValue("SystemUsesLightTheme", light ? 1 : 0, RegistryValueKind.DWord);
+        }
+        // allen Programmen Bescheid geben, damit sie sofort umschalten
+        Native.SendMessageTimeout(new IntPtr(0xFFFF), 0x1A /* WM_SETTINGCHANGE */, IntPtr.Zero, "ImmersiveColorSet", 2, 300, out _);
+    }
+
+    public static void ToggleDesktopIcons()
+    {
+        var view = Native.FindWindowEx(Native.FindWindow("Progman", null), IntPtr.Zero, "SHELLDLL_DefView", null);
+        var w = IntPtr.Zero;
+        while (view == IntPtr.Zero && (w = Native.FindWindowEx(IntPtr.Zero, w, "WorkerW", null)) != IntPtr.Zero)
+            view = Native.FindWindowEx(w, IntPtr.Zero, "SHELLDLL_DefView", null);
+        if (view != IntPtr.Zero) Native.PostMessage(view, 0x111 /* WM_COMMAND */, new IntPtr(0x7402), IntPtr.Zero);
+    }
+
+    public static void SetWallpaper(string path)
+    {
+        if (File.Exists(path)) Native.SystemParametersInfo(20 /* SPI_SETDESKWALLPAPER */, 0, path, 3);
+    }
+}
+
+// ---------- Fensterrahmen anderer Programme: Milchglas in der Titelleiste, Rand in Inselfarbe ----------
+internal static class Frames
+{
+    private static bool on;
+    private static readonly HashSet<IntPtr> styled = new();
+
+    public static void Set(bool enable)
+    {
+        lock (styled) SetLocked(enable);
+    }
+
+    private static void SetLocked(bool enable)
+    {
+        if (enable == on) return;
+        on = enable;
+        if (!enable)
+        {
+            foreach (var h in styled) Style(h, 0, unchecked((int)0xFFFFFFFF));   // zurück auf Windows-Standard
+            styled.Clear();
+        }
+    }
+
+    public static void Apply(IEnumerable<IntPtr> windows)
+    {
+        lock (styled)
+        {
+            if (!on) return;
+            var current = windows.ToHashSet();
+            styled.IntersectWith(current);
+            foreach (var h in current) if (styled.Add(h)) Style(h, 3 /* Acryl */, 0x0054B4FF /* #ffb454 als BGR */);
+        }
+    }
+
+    private static void Style(IntPtr h, int backdrop, int border)
+    {
+        Native.DwmSetWindowAttribute(h, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, ref backdrop, 4);
+        Native.DwmSetWindowAttribute(h, 34 /* DWMWA_BORDER_COLOR */, ref border, 4);
     }
 }
 
@@ -386,6 +536,10 @@ internal static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string? cls, string? title);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string? cls, string? title);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, string l, uint flags, uint timeout, out IntPtr result);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(uint action, uint param, string value, uint flags);
     [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
     [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder name, ref int size);

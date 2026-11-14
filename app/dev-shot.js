@@ -9,7 +9,8 @@ module.exports = win => {
     if (!process.env.INSEL_REAL) win.webContents.send('apps', { pins: [{ name: 'Dateien', icon: dot, wins: [1], active: false }, { name: 'Spiel', icon: '', wins: [], active: false }], others: [{ name: 'Browser', icon: dot, wins: [2], active: true }] });
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'media', has: true, title: 'Nachtfahrt', artist: 'Lumen Kollektiv', playing: true, pos: 47, dur: 214 });
     win.webContents.send('ev', { t: 'volume', level: 0.6, muted: false });
-    for (const s of ['idle', 'hub', 'music', 'quick', 'timer', 'vol']) {
+    if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'notifyState', on: true, apps: [{ name: 'Discord', on: true }, { name: 'Mail', on: false }, { name: 'Steam', on: true }] });
+    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'notif', 'timer', 'vol']) {
       await win.webContents.executeJavaScript(`document.querySelector('#island').dataset.state='${s}'`);
       await wait(900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
