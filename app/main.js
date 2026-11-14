@@ -12,9 +12,9 @@ const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, locked: false, clear: false, hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, locked: false, clear: false, winKey: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
-let lastTray = { t: 'tray', ok: false, icons: [] };
+let lastTray = { t: 'tray', ok: false, icons: [] }, lastMic = { t: 'mic', has: false, muted: false };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
 const iconCache = new Map();
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -136,11 +136,14 @@ function startHelper() {
     if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
+    else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
+    else if (ev.t === 'winkey') { if (!hiddenForFullscreen || peeking) send('ev', ev); }
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
     else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
     else if (ev.t === 'fullscreen') {
       if (process.env.INSEL_SHOT) return;   // im Probelauf immer sichtbar bleiben
       hiddenForFullscreen = !!ev.on;
+      peeking = false; edgeSince = 0;
       if (win && !win.isDestroyed()) { if (ev.on) win.hide(); else { win.showInactive(); protect(); } }
       send('ev', { t: 'visible', on: !ev.on });
     }
@@ -154,8 +157,31 @@ function startHelper() {
   if (cfg.hideTaskbar) sendHelper({ c: 'taskbar', hide: true });
   if (cfg.frames) sendHelper({ c: 'frames', on: true });
   sendHelper({ c: 'notify', on: !!cfg.notify.on });
+  sendHelper({ c: 'winkey', on: !!cfg.winKey });
 }
 const notifyState = () => ({ t: 'notifyState', on: !!cfg.notify.on, apps: cfg.notifyApps.map(n => ({ name: n, on: !cfg.notify.off.includes(n) })) });
+
+// Vollbild (Spiel, Video): Die Insel ist weg, kommt aber zurück, wenn die Maus kurz am Bildschirmrand bei ihr anstößt.
+let peeking = false, edgeSince = 0, awaySince = 0;
+setInterval(() => {
+  if (!win || win.isDestroyed() || !hiddenForFullscreen || !cfg.pos) return;
+  const c = screen.getCursorScreenPoint(), now = Date.now();
+  const d = screen.getDisplayNearestPoint({ x: cfg.pos.cx, y: cfg.pos.y }).bounds;
+  if (!peeking) {
+    const atEdge = cfg.pos.anchor === 'bottom' ? c.y >= d.y + d.height - 2 : c.y <= d.y + 1;
+    const near = Math.abs(c.x - cfg.pos.cx) < 220 && c.x >= d.x && c.x < d.x + d.width;
+    if (atEdge && near) {
+      if (!edgeSince) edgeSince = now;
+      else if (now - edgeSince > 300) { peeking = true; awaySince = 0; win.showInactive(); protect(); send('ev', { t: 'visible', on: true }); }
+    } else edgeSince = 0;
+  } else {
+    const b = win.getBounds(), r = islandRect;
+    const inside = r && c.x >= b.x + r.left - 40 && c.x <= b.x + r.left + r.width + 40 && c.y >= b.y + r.top - 40 && c.y <= b.y + r.top + r.height + 40;
+    if (inside || win.isFocused()) awaySince = 0;
+    else if (!awaySince) awaySince = now;
+    else if (now - awaySince > 1200) { peeking = false; edgeSince = 0; win.hide(); send('ev', { t: 'visible', on: false }); }
+  }
+}, 100);
 
 // ---------- Widgets: kleine Glaskarten direkt auf dem Desktop ----------
 const WIDGETS = { clock: { w: 232, h: 132 }, calendar: { w: 232, h: 268 }, system: { w: 232, h: 150 } };
@@ -231,9 +257,9 @@ function createWindow() {
 }
 
 ipcMain.handle('ready', () => {
-  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', updateState); });
+  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', lastMic); send('ev', updateState); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
+           glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
@@ -265,6 +291,17 @@ function wallpaperUrl() {
   return wallCache.url;
 }
 setInterval(() => { const before = wallCache.url, now = wallpaperUrl(); if (now !== before) send('ev', { t: 'wall', data: now }); }, 4000);
+ipcMain.on('set-winkey', (_e, b) => { cfg.winKey = !!b; saveCfg(); sendHelper({ c: 'winkey', on: cfg.winKey }); });
+ipcMain.on('mic-toggle', () => sendHelper({ c: 'micmute' }));
+ipcMain.on('snip', () => setTimeout(() => sendHelper({ c: 'snip' }), 350));
+ipcMain.on('mixer', (_e, on) => sendHelper({ c: 'mixer', on: !!on }));
+ipcMain.on('app-vol', (_e, { name, v }) => sendHelper({ c: 'appvol', name: String(name), v: Math.max(0, Math.min(1, +v || 0)) }));
+let noteT = null;
+ipcMain.on('note-save', (_e, text) => { cfg.note = String(text || '').slice(0, 20000); clearTimeout(noteT); noteT = setTimeout(saveCfg, 600); });
+ipcMain.on('pin-move', (_e, { from, to }) => {
+  if (!cfg.pins[from] || to < 0 || to >= cfg.pins.length || from === to) return;
+  cfg.pins.splice(to, 0, cfg.pins.splice(from, 1)[0]); saveCfg(); pushApps();
+});
 ipcMain.on('set-locked', (_e, b) => { cfg.locked = !!b; saveCfg(); });
 ipcMain.on('set-clear', (_e, b) => { cfg.clear = !!b; saveCfg(); });
 
@@ -323,7 +360,10 @@ ipcMain.on('power', (_e, kind) => {
 // Für die Suche braucht die Insel kurz die Tastatur; sonst nimmt sie anderen Fenstern nie den Fokus weg.
 ipcMain.on('focus', (_e, b) => {
   if (!win || win.isDestroyed()) return;
-  if (b) { win.setFocusable(true); win.setIgnoreMouseEvents(false); win.focus(); }
+  if (b) {
+    win.setFocusable(true); win.setIgnoreMouseEvents(false); win.focus();
+    try { sendHelper({ c: 'fg', h: Number(win.getNativeWindowHandle().readBigUInt64LE(0)) }); } catch (_) {}
+  }
   else { win.blur(); win.setFocusable(false); }
 });
 ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });

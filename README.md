@@ -16,7 +16,11 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Widgets** auf dem Desktop: Uhr, Kalender, System
 - **Eigenes Startmenü** in der Insel: alle Programme mit Suche, dazu Sperren, Neu starten, Herunterfahren
 - **Frei verschieben** oder Position sperren; wahlweise komplett durchsichtig
-- Versteckt sich automatisch bei Spielen und Videos im Vollbild
+- Versteckt sich bei Spielen und Videos im Vollbild; kurz mit der Maus an den Bildschirmrand, und sie kommt zurück
+- **Lautstärke pro Programm**, Mikrofon stummschalten mit Anzeige in der Insel
+- **Windows-Taste** öffnet das Menü der Insel (abschaltbar)
+- **Bildschirmausschnitt** aufnehmen und **Notizen**
+- Angeheftete Programme per Ziehen **umsortieren**
 - Timer
 - **Automatische Updates:** Die Insel lädt neue Versionen selbst; installiert wird per Klick unter „Regler“ oder beim nächsten Beenden
 

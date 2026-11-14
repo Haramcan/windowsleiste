@@ -56,18 +56,21 @@ img{-webkit-user-drag:none}
 .island.dragging{cursor:grabbing}
 .island[data-state="hub"]{--w:var(--hubw,480px);--h:134px}
 .island[data-state="start"]{--w:560px;--h:436px}
+.island.has-mic[data-state="idle"]{--w:262px}
 .island.has-tray[data-state="hub"]{--h:170px}
 .island.has-media[data-state="hub"]{--w:min(calc(var(--hubw,480px) + 300px),780px);--h:178px}
 .island[data-state="music"]{--w:420px;--h:196px}
-.island[data-state="quick"]{--w:400px;--h:344px}
+.island[data-state="quick"]{--w:400px;--h:390px}
 .island[data-state="look"]{--w:400px;--h:252px}
 .island[data-state="widgets"]{--w:400px;--h:160px}
 .island[data-state="notif"]{--w:400px;--h:264px}
 .island[data-state="timer"]{--w:330px;--h:156px}
 .island[data-state="toast"]{--w:360px;--h:64px}
+.island[data-state="mixer"]{--w:420px;--h:300px}
+.island[data-state="notes"]{--w:420px;--h:300px}
 .island[data-state="vol"]{--w:300px;--h:52px;--r:26px}
 .view{position:absolute;inset:0;opacity:0;pointer-events:none;transform:scale(.96);transition:opacity .12s,transform .2s;display:flex;will-change:opacity,transform}
-.island[data-state="start"] .v-start,.island[data-state="look"] .v-look,.island[data-state="widgets"] .v-widgets,.island[data-state="notif"] .v-notif,
+.island[data-state="mixer"] .v-mixer,.island[data-state="notes"] .v-notes,.island[data-state="start"] .v-start,.island[data-state="look"] .v-look,.island[data-state="widgets"] .v-widgets,.island[data-state="notif"] .v-notif,
 .island[data-state="idle"] .v-idle,.island[data-state="hub"] .v-hub,.island[data-state="music"] .v-music,.island[data-state="quick"] .v-quick,
 .island[data-state="timer"] .v-timer,.island[data-state="toast"] .v-toast,.island[data-state="vol"] .v-vol{opacity:1;pointer-events:auto;transform:none;
   transition:opacity .22s .1s,transform .45s cubic-bezier(.3,1.3,.5,1) .06s}
@@ -134,6 +137,19 @@ img{-webkit-user-drag:none}
 .ti .letter{width:16px;height:16px;border-radius:5px;font-size:10px}
 .sep{width:1px;background:var(--mat-line);margin:8px 4px;flex:none}
 .chips{display:flex;gap:6px}
+.chip.icon{flex:0 0 40px;padding:0;justify-content:center}
+.mic .slash{display:none}
+.mic-off .mic{color:#ff6b6b}
+.mic-off .mic .slash{display:inline}
+.idle-mic{display:none;height:34px;align-items:center;padding:0 4px;color:var(--ink-soft)}
+.has-mic .idle-mic{display:flex}
+.app.moving{z-index:3;background:var(--fill-hover);transition:none}
+/* Lautstärke pro Programm, Notizen */
+.v-mixer,.v-notes{justify-content:flex-start;gap:12px}
+.mx-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.25) transparent}
+.mx-list .cap{width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note{flex:1;min-height:0;resize:none;border-radius:16px;border:1px solid var(--mat-line);background:var(--fill);color:var(--ink);font:inherit;font-size:13.5px;line-height:1.45;padding:12px 14px;outline:none}
+.note:focus{border-color:var(--accent)}
 .chip{flex:1;min-width:0;height:40px;border-radius:999px;background:var(--fill);border:1px solid var(--mat-line);display:flex;align-items:center;gap:8px;padding:0 12px;font-size:13px}
 .chip:hover{background:var(--fill-hover)}
 .chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -210,6 +226,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <svg width="16" height="16" viewBox="0 0 16 16" fill="var(--accent)"><rect x="1" y="1" width="6.5" height="6.5" rx=".8"/><rect x="8.5" y="1" width="6.5" height="6.5" rx=".8"/><rect x="1" y="8.5" width="6.5" height="6.5" rx=".8"/><rect x="8.5" y="8.5" width="6.5" height="6.5" rx=".8"/></svg>
       <span class="clock num" id="clock">--:--</span>
     </button>
+    <span class="idle-mic mic"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 009 0M8 12v2"/><path class="slash" d="M2.5 2.5l11 11"/></svg></span>
     <button class="idle-btn" id="idleMusic" data-go="music" hidden>
       <span class="mini-art cover"></span>
       <span class="eq"><i></i><i></i><i></i><i></i></span>
@@ -232,6 +249,9 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <button class="chip" data-go="timer">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="9" r="5.2"/><path d="M8 6.5V9l1.8 1.2M6.5 1.5h3"/></svg>
         <span class="num" id="timerChip">12:00</span></button>
+      <button class="chip icon mic" id="bMic" title="Mikrofon stumm schalten" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 009 0M8 12v2"/><path class="slash" d="M2.5 2.5l11 11"/></svg></button>
+      <button class="chip icon" id="bSnip" title="Bildschirmausschnitt aufnehmen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5V3.5A1.5 1.5 0 013.5 2H5M11 2h1.5A1.5 1.5 0 0114 3.5V5M14 11v1.5a1.5 1.5 0 01-1.5 1.5H11M5 14H3.5A1.5 1.5 0 012 12.500V11"/><circle cx="8" cy="8" r="2"/></svg></button>
+      <button class="chip icon" data-go="notes" title="Notizen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.500h10v7.500l-3.500 3.500H3z"/><path d="M9.500 13.500V10H13M5.500 5.500h5M5.500 8h3"/></svg></button>
     </div>
    </div>
    <div class="hub-music">
@@ -287,14 +307,18 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     <div class="row"><span class="cap">Lautstärke</span><input type="range" id="volQuick" min="0" max="100" value="50"><span class="q-val num" id="volVal">50</span></div>
     <div class="toggles">
       <button class="tog" id="tMute" aria-pressed="false">Stumm</button>
-      <button class="tog" id="tTaskbar" aria-pressed="false">Taskleiste ausblenden</button>
+      <button class="tog" data-go="mixer">Lautstärke pro Programm …</button>
     </div>
     <div class="toggles">
       <button class="tog" id="tLock" aria-pressed="false">Position sperren</button>
       <button class="tog" id="tClear" aria-pressed="false">Durchsichtig</button>
     </div>
     <div class="toggles">
+      <button class="tog" id="tTaskbar" aria-pressed="false">Taskleiste ausblenden</button>
       <button class="tog" id="tAuto" aria-pressed="false">Mit Windows starten</button>
+    </div>
+    <div class="toggles">
+      <button class="tog" id="tWinKey" aria-pressed="false">Windows-Taste öffnet Insel-Menü</button>
       <button class="tog plain" id="quit">Insel beenden</button>
     </div>
     <div class="toggles">
@@ -304,6 +328,20 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     <div class="toggles">
       <button class="tog" id="bUpdate">Nach Updates suchen</button>
     </div>
+  </div>
+
+  <!-- Lautstärke pro Programm -->
+  <div class="view big v-mixer" data-view="mixer">
+    <button class="back" data-go="quick"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <div class="label">Lautstärke pro Programm</div>
+    <div class="mx-list" id="mxList"><p class="hint">Hier erscheint jedes Programm, das gerade Ton abspielt.</p></div>
+  </div>
+
+  <!-- Notizen -->
+  <div class="view big v-notes" data-view="notes">
+    <button class="back" data-go="hub"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <div class="label">Notizen</div>
+    <textarea class="note" id="note" placeholder="Einfach lostippen. Wird automatisch gespeichert." spellcheck="false"></textarea>
   </div>
 
   <!-- Aussehen -->

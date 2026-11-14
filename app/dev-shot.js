@@ -10,9 +10,10 @@ module.exports = win => {
     if (!process.env.INSEL_REAL) win.webContents.send('apps', { pins: [{ name: 'Dateien', icon: dot, wins: [1], active: false }, { name: 'Spiel', icon: '', wins: [], active: false }], others: [{ name: 'Browser', icon: dot, wins: [2], active: true }] });
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'media', has: true, title: 'Nachtfahrt', artist: 'Lumen Kollektiv', playing: true, pos: 47, dur: 214 });
     win.webContents.send('ev', { t: 'volume', level: 0.6, muted: false });
+    if (!process.env.INSEL_REAL) { win.webContents.send('ev', { t: 'mic', has: true, muted: true }); win.webContents.send('ev', { t: 'mixer', list: [{ pid: 1, name: 'Spotify', level: 0.4, muted: false }, { pid: 2, name: 'chrome', level: 1, muted: false }, { pid: 0, name: 'Systemtöne', level: 0.7, muted: false }] }); }
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'tray', ok: true, icons: [{ id: 'a', title: 'Discord', icon: dot }, { id: 'b', title: 'Steam', icon: '' }, { id: 'c', title: 'Virenschutz', icon: dot }] });
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'notifyState', on: true, apps: [{ name: 'Discord', on: true }, { name: 'Mail', on: false }, { name: 'Steam', on: true }] });
-    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'timer', 'vol', 'start']) {
+    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'mixer', 'notes', 'timer', 'vol', 'start']) {
       await win.webContents.executeJavaScript(s === 'start' ? `document.querySelector('[data-start]').click()` : `document.querySelector('#island').dataset.state='${s}'`);
       await wait(s === 'start' ? 6000 : 900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());

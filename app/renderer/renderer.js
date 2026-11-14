@@ -5,11 +5,15 @@
   let locked = false;
   let state = 'idle', leaveT = null, toastT = null, drag = null, dragEnd = 0, hover = false;
 
+  const sticky = s => s === 'start' || s === 'notes';
   function setState(s) {
     const was = state;
     state = s; island.dataset.state = s;
     if (s === 'start' && was !== 'start') openStart();
-    if (was === 'start' && s !== 'start') api.focus(false);
+    if (s === 'notes' && was !== 'notes') { api.focus(true); setTimeout(() => $('#note').focus(), 60); }
+    if (sticky(was) && !sticky(s)) api.focus(false);
+    if (s === 'mixer' && was !== 'mixer') api.mixer(true);
+    if (was === 'mixer' && s !== 'mixer') api.mixer(false);
     $$('.view').forEach(v => { v.inert = v.dataset.view !== s; });
     reportRect();
   }
@@ -38,7 +42,7 @@
   });
   function scheduleClose() {
     clearTimeout(leaveT);
-    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && state !== 'start' && !hover) setState('idle'); }, 450);
+    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !sticky(state) && !hover) setState('idle'); }, 450);
   }
   island.addEventListener('click', e => { if (Date.now() - dragEnd < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   island.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) setState(g.dataset.go); });
@@ -50,23 +54,34 @@
 
   // ---------- Verschieben ----------
   island.addEventListener('pointerdown', e => {
-    if (locked || e.button !== 0 || e.target.closest('input')) return;
-    drag = { id: e.pointerId, x: e.screenX, y: e.screenY, moved: false };
+    if (e.button !== 0 || e.target.closest('input, textarea')) return;
+    const pin = e.target.closest('[data-kind="pin"]');
+    if (locked && !pin) return;
+    drag = { id: e.pointerId, x: e.screenX, y: e.screenY, moved: false, pin: pin || null };
   });
   window.addEventListener('pointermove', e => {
     if (!drag || e.pointerId !== drag.id) return;
     if (!drag.moved) {
       if (Math.hypot(e.screenX - drag.x, e.screenY - drag.y) < 6) return;
-      drag.moved = true; island.classList.add('dragging');
+      drag.moved = true;
       try { island.setPointerCapture(e.pointerId); } catch (_) {}
-      api.dragStart();
+      if (drag.pin) drag.pin.classList.add('moving');
+      else { island.classList.add('dragging'); api.dragStart(); }
     }
-    api.dragMove();
+    if (drag.pin) drag.pin.style.transform = 'translateX(' + (e.screenX - drag.x) + 'px)';
+    else api.dragMove();
   });
   function endDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
-    const moved = drag.moved; drag = null;
-    if (moved) {
+    const moved = drag.moved, pin = drag.pin; drag = null;
+    if (moved && pin) {
+      // Zielplatz: so viele andere angeheftete Symbole, wie links vom losgelassenen liegen
+      const mid = pin.getBoundingClientRect().left + pin.offsetWidth / 2;
+      const others = $$('#apps [data-kind="pin"]').filter(b => b !== pin);
+      const to = others.filter(b => b.getBoundingClientRect().left + b.offsetWidth / 2 < mid).length;
+      pin.style.transform = ''; pin.classList.remove('moving'); dragEnd = Date.now();
+      api.pinMove(+pin.dataset.i, to);
+    } else if (moved) {
       const r = island.getBoundingClientRect();
       island.classList.remove('dragging'); dragEnd = Date.now();
       api.dragEnd({ top: r.top, left: r.left, width: r.width, height: r.height });
@@ -244,6 +259,25 @@
   }
   toggle('#tTaskbar', api.setHideTaskbar);
   toggle('#tAuto', api.setAutostart);
+  toggle('#tWinKey', api.setWinKey);
+  $('#bMic').addEventListener('click', () => api.micToggle());
+  $('#bSnip').addEventListener('click', () => { setState('idle'); api.snip(); });
+
+  // ---------- Lautstärke pro Programm ----------
+  function renderMixer(list) {
+    if ($('#mxList').matches(':active') || $('#mxList :active')) return;   // nicht neu zeichnen, während ein Regler gezogen wird
+    $('#mxList').innerHTML = list.length ? list.map(a => '<div class="row"><span class="cap" title="' + esc(a.name) + '">' + esc(a.name) + '</span>' +
+      '<input type="range" min="0" max="100" value="' + Math.round((a.muted ? 0 : a.level) * 100) + '" data-vol="' + esc(a.name) + '"><span class="q-val num">' + Math.round((a.muted ? 0 : a.level) * 100) + '</span></div>').join('')
+      : '<p class="hint">Gerade spielt kein Programm Ton ab.</p>';
+  }
+  $('#mxList').addEventListener('input', e => {
+    const s = e.target.closest('[data-vol]'); if (!s) return;
+    s.nextElementSibling.textContent = s.value; api.appVol(s.dataset.vol, s.value / 100);
+  });
+
+  // ---------- Notizen ----------
+  $('#note').addEventListener('input', () => api.noteSave($('#note').value));
+  $('#note').addEventListener('keydown', e => { if (e.key === 'Escape') setState('idle'); });
   $('#tGlass').addEventListener('click', () => setGlassMode(glassMode ? false : 'bild'));
   $('#tLive').addEventListener('click', () => setGlassMode(glassMode === 'live' ? 'bild' : 'live'));
   toggle('#tFrames', api.setFrames);
@@ -350,7 +384,10 @@
     }
     else if (ev.t === 'toast') toast(ev.m);
     else if (ev.t === 'update') showUpdate(ev);
-    else if (ev.t === 'blur') { if (state === 'start') setState('idle'); }
+    else if (ev.t === 'blur') { if (sticky(state)) setState('idle'); }
+    else if (ev.t === 'winkey') setState(state === 'start' ? 'idle' : 'start');
+    else if (ev.t === 'mic') { island.classList.toggle('has-mic', !!ev.has); island.classList.toggle('mic-off', !!ev.has && !!ev.muted); $('#bMic').hidden = !ev.has; $('#bMic').title = ev.muted ? 'Mikrofon ist stumm – einschalten' : 'Mikrofon stumm schalten'; }
+    else if (ev.t === 'mixer') renderMixer(ev.list || []);
     else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
     else if (ev.t === 'notifyState') showNotifyState(ev);
@@ -366,6 +403,7 @@
     $('#tAuto').setAttribute('aria-pressed', !!s.autostart);
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
     locked = !!s.locked; $('#tLock').setAttribute('aria-pressed', locked);
+    $('#tWinKey').setAttribute('aria-pressed', !!s.winKey); $('#note').value = s.note || '';
     island.classList.toggle('clear', !!s.clear); $('#tClear').setAttribute('aria-pressed', !!s.clear);
     showNotifyState(s.notify);
     (s.widgets || []).forEach(w => { const b = document.querySelector('[data-widget="' + w.name + '"]'); if (b) b.setAttribute('aria-pressed', !!w.on); });

@@ -37,6 +37,7 @@ internal static class Program
         if (args.Length > 0) uint.TryParse(args[0], out hostPid);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => { Taskbar.Set(false); Frames.Set(false); };
         if (!args.Contains("--no-tray")) Tray.Start(Emit);
+        WinKey.Start(Emit);
         var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
         Emit(new { t = "hello" });
 
@@ -53,6 +54,8 @@ internal static class Program
         Frames.Set(false);
         Tray.Stop();
     }
+
+    private static volatile bool MixerOn;
 
     private static void Handle(string line)
     {
@@ -75,6 +78,20 @@ internal static class Program
                 { var id = r.GetProperty("id").GetString() ?? ""; Emit(new { t = "appicon", id, data = AppIcons.Get(id) }); }
                 break;
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
+            case "winkey": WinKey.Enabled = r.GetProperty("on").GetBoolean(); break;
+            case "fg":   // der Insel die Tastatur geben (für die Suche im Menü)
+                {
+                    var h = new IntPtr(r.GetProperty("h").GetInt64());
+                    Native.keybd_event(0x12, 0, 0, UIntPtr.Zero); Native.SetForegroundWindow(h); Native.keybd_event(0x12, 0, 2, UIntPtr.Zero);
+                }
+                break;
+            case "snip":   // Bildschirmausschnitt: Win+Umschalt+S
+                Native.keybd_event(0x5B, 0, 0, UIntPtr.Zero); Native.keybd_event(0x10, 0, 0, UIntPtr.Zero); Native.keybd_event(0x53, 0, 0, UIntPtr.Zero);
+                Native.keybd_event(0x53, 0, 2, UIntPtr.Zero); Native.keybd_event(0x10, 0, 2, UIntPtr.Zero); Native.keybd_event(0x5B, 0, 2, UIntPtr.Zero);
+                break;
+            case "micmute": Audio.MicToggle(); break;
+            case "mixer": MixerOn = r.GetProperty("on").GetBoolean(); break;
+            case "appvol": Audio.SetAppVolume(r.GetProperty("name").GetString() ?? "", (float)Math.Clamp(r.GetProperty("v").GetDouble(), 0, 1)); break;
             case "bottom":   // Widgets liegen auf dem Desktop, hinter allen Fenstern
                 Native.SetWindowPos(new IntPtr(r.GetProperty("h").GetInt64()), new IntPtr(1) /* HWND_BOTTOM */, 0, 0, 0, 0, 0x13 /* NOSIZE|NOMOVE|NOACTIVATE */);
                 break;
@@ -83,7 +100,7 @@ internal static class Program
 
     private static void PollLoop()
     {
-        string lastWindows = "", lastVolume = "", lastTheme = "";
+        string lastWindows = "", lastVolume = "", lastTheme = "", lastMic = "", lastMixer = "";
         bool lastFull = false;
         int n = 0;
         while (true)
@@ -105,6 +122,18 @@ internal static class Program
                 Frames.Apply(list.Select(x => new IntPtr(x.h)));
                 if (n % 2 == 0) Media.Poll(Emit).GetAwaiter().GetResult();
                 if (n % 3 == 0) Notifications.Poll(Emit).GetAwaiter().GetResult();
+                {
+                    bool hasMic = Audio.MicState(out bool micMuted);
+                    var mic = hasMic + "|" + micMuted;
+                    if (mic != lastMic) { lastMic = mic; Emit(new { t = "mic", has = hasMic, muted = micMuted }); }
+                }
+                if (MixerOn)
+                {
+                    var apps = Audio.Mixer();
+                    var mx = JsonSerializer.Serialize(apps);
+                    if (mx != lastMixer) { lastMixer = mx; Emit(new { t = "mixer", list = apps }); }
+                }
+                else lastMixer = "";
                 if (n % 4 == 0)
                 {
                     var th = Look.IsLight() ? "light" : "dark";
@@ -431,7 +460,7 @@ internal static class WindowList
         if (found.Any(f => f.h == fg)) lastActive = fg;
         else if (!found.Any(f => f.h == lastActive)) lastActive = IntPtr.Zero;
 
-        fullscreen = found.Any(f => f.h == fg) && !Native.IsZoomed(fg) && CoversMonitor(fg);   // maximiert zählt nicht als Vollbild
+        fullscreen = found.Any(f => f.h == fg) && CoversMonitor(fg);
         return found.Select(f => new WindowInfo(f.h.ToInt64(), f.title, f.exe, f.h == lastActive && !Native.IsIconic(f.h))).ToList();
     }
 
@@ -458,7 +487,9 @@ internal static class WindowList
         if (!Native.GetWindowRect(h, out var r)) return false;
         var mi = new Native.MONITORINFO { cbSize = Marshal.SizeOf<Native.MONITORINFO>() };
         if (!Native.GetMonitorInfo(Native.MonitorFromWindow(h, 2), ref mi)) return false;
-        return r.Left <= mi.rcMonitor.Left && r.Top <= mi.rcMonitor.Top && r.Right >= mi.rcMonitor.Right && r.Bottom >= mi.rcMonitor.Bottom;
+        // Vollbild (auch Videos im Browser) ist genau so groß wie der Bildschirm; maximierte Fenster ragen darüber hinaus.
+        var m = mi.rcMonitor;
+        return Math.Abs(r.Left - m.Left) <= 1 && Math.Abs(r.Top - m.Top) <= 1 && Math.Abs(r.Right - m.Right) <= 1 && Math.Abs(r.Bottom - m.Bottom) <= 1;
     }
 
     // Wie in der Taskleiste: Klick holt das Fenster nach vorn, Klick auf das aktive Fenster minimiert es.
