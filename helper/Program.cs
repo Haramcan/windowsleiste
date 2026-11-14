@@ -6,6 +6,7 @@
 //               {"c":"theme","light":true}  {"c":"deskicons"}  {"c":"wallpaper","path":"..."}
 //               {"c":"frames","on":true}  {"c":"notify","on":true}
 //               {"c":"tray","id":"...","b":"left|right"}  {"c":"bottom","h":123}
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
