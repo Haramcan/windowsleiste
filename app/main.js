@@ -92,10 +92,10 @@ async function pushApps() {
   for (const w of wins) {
     if (used.has(w.h)) continue;
     const k = w.exe.toLowerCase();
-    if (!groups.has(k)) groups.set(k, { exe: w.exe, name: w.title, icon: await fileIcon(w.exe), wins: [], active: false });
+    if (!groups.has(k)) groups.set(k, { exe: w.exe, name: path.win32.basename(w.exe).replace(/\.exe$/i, ''), icon: await fileIcon(w.exe), wins: [], active: false });
     const g = groups.get(k);
     g.wins.push(w.h);
-    if (w.active) { g.active = true; g.name = w.title; }
+    if (w.active) g.active = true;
   }
   lastApps = { pins, others: [...groups.values()] };
   send('apps', lastApps);
@@ -138,7 +138,7 @@ function startHelper() {
     else if (ev.t === 'fullscreen') {
       if (process.env.INSEL_SHOT) return;   // im Probelauf immer sichtbar bleiben
       hiddenForFullscreen = !!ev.on;
-      if (win && !win.isDestroyed()) { if (ev.on) win.hide(); else win.showInactive(); }
+      if (win && !win.isDestroyed()) { if (ev.on) win.hide(); else { win.showInactive(); protect(); } }
       send('ev', { t: 'visible', on: !ev.on });
     }
     else if (ev.t === 'notif') {
@@ -202,6 +202,15 @@ setInterval(() => {
 }, 2000);
 
 // ---------- Fenster ----------
+// Milchglas: Die Insel selbst darf in der Bildschirmaufnahme nicht auftauchen, sonst spiegelt sie sich im Glas.
+// Windows übernimmt das nur zuverlässig, wenn es bei sichtbarem Fenster gesetzt wird (im Probelauf gemessen).
+function protect() {
+  if (!win || win.isDestroyed()) return;
+  win.setIgnoreMouseEvents(false);
+  win.setContentProtection(false);
+  win.setContentProtection(!!cfg.glass);
+  win.setIgnoreMouseEvents(true, { forward: true });
+}
 function createWindow() {
   win = new BrowserWindow({
     width: WIN_W, height: WIN_H, show: false,
@@ -211,9 +220,8 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
-  win.setContentProtection(!!cfg.glass);   // die Insel selbst taucht in der Aufnahme für das Milchglas nicht auf
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => { applyPos(); if (!hiddenForFullscreen) win.showInactive(); });
+  win.once('ready-to-show', () => { applyPos(); if (!hiddenForFullscreen) win.showInactive(); protect(); });
   screen.on('display-metrics-changed', applyPos);
   screen.on('display-removed', applyPos);
 }
@@ -233,7 +241,7 @@ ipcMain.handle('glass-source', async (_e, displayId) => {
     return s ? s.id : null;
   } catch (_) { return null; }
 });
-ipcMain.on('set-glass', (_e, b) => { cfg.glass = !!b; saveCfg(); win.setContentProtection(cfg.glass); });
+ipcMain.on('set-glass', (_e, b) => { cfg.glass = !!b; saveCfg(); win.setContentProtection(cfg.glass); });   // Maus ist dabei über der Insel
 ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });
 ipcMain.on('set-theme', (_e, light) => sendHelper({ c: 'theme', light: !!light }));
 ipcMain.on('desk-icons', () => sendHelper({ c: 'deskicons' }));

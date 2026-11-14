@@ -112,13 +112,16 @@
     const pic = a.icon ? '<img src="' + esc(a.icon) + '" alt="">' : '<span class="letter">' + esc((a.name || '?').charAt(0).toUpperCase()) + '</span>';
     return '<button class="' + cls + '" data-kind="' + kind + '" data-i="' + i + '" title="' + esc(a.name) + '">' + pic + '</button>';
   }
+  let appsHtml = '';
   function renderApps(d) {
     const start = '<button class="app" data-start title="Start"><svg width="22" height="22" viewBox="0 0 22 22" fill="var(--accent)"><rect x="3" y="3" width="7.5" height="7.5" rx="1"/><rect x="11.5" y="3" width="7.5" height="7.5" rx="1"/><rect x="3" y="11.5" width="7.5" height="7.5" rx="1"/><rect x="11.5" y="11.5" width="7.5" height="7.5" rx="1"/></svg></button>';
     const add = '<button class="app add" data-add title="Programm oder Spiel anheften"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>';
     const sep = '<span class="sep"></span>';
-    $('#apps').innerHTML = start + sep +
+    const html = start + sep +
       d.pins.map((a, i) => appBtn(a, 'pin', i)).join('') + add +
       (d.others.length ? sep + d.others.map((a, i) => appBtn(a, 'other', i)).join('') : '');
+    if (html === appsHtml) return;   // nichts geändert: nicht neu zeichnen, sonst gehen Klicks verloren
+    appsHtml = html; $('#apps').innerHTML = html;
     // Die Übersicht wächst mit der Zahl der Symbole (bis zur Fensterbreite).
     const n = 2 + d.pins.length + d.others.length, seps = d.others.length ? 2 : 1;
     const w = n * 44 + seps * 13 + 32;
@@ -138,11 +141,14 @@
   });
 
   // ---------- Symbole aus dem Infobereich ----------
-  let trayIcons = [];
+  let trayIcons = [], trayHtml = '';
+  // Mausrad blättert seitlich durch lange Symbolreihen
+  ['#apps', '#tray'].forEach(sel => $(sel).addEventListener('wheel', e => { $(sel).scrollLeft += e.deltaY; }, { passive: true }));
   function renderTray(ev) {
     trayIcons = ev.icons || [];
-    $('#tray').innerHTML = trayIcons.map((t, i) => '<button class="ti" data-ti="' + i + '" title="' + esc(t.title) + '">' +
+    const html = trayIcons.map((t, i) => '<button class="ti" data-ti="' + i + '" title="' + esc(t.title) + '">' +
       (t.icon ? '<img src="' + esc(t.icon) + '" alt="">' : '<span class="letter">' + esc((t.title || '?').charAt(0).toUpperCase()) + '</span>') + '</button>').join('');
+    if (html !== trayHtml) { trayHtml = html; $('#tray').innerHTML = html; }
     island.classList.toggle('has-tray', trayIcons.length > 0);
   }
   $('#tray').addEventListener('click', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) api.trayClick(trayIcons[+b.dataset.ti].id, 'left'); });

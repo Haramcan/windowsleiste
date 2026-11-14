@@ -55,6 +55,7 @@ jobs:
           INSEL_SHOT=shots INSEL_REAL=1 timeout 120 npx electron . || true
           sort shots/helper.log | uniq -c
           grep '^glas' shots/helper.log || true
+          grep -q '^glas: Standard: 0 von' shots/helper.log
           ls shots/idle.png shots/hub.png shots/music.png
           grep -q "helper: windows" shots/helper.log
           grep -q "helper: tray" shots/helper.log
