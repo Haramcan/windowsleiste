@@ -279,7 +279,15 @@ ipcMain.on('pin-add', async () => {
 });
 ipcMain.on('set-hide-taskbar', (_e, b) => { cfg.hideTaskbar = !!b; saveCfg(); sendHelper({ c: 'taskbar', hide: cfg.hideTaskbar }); });
 ipcMain.on('set-autostart', (_e, b) => { app.setLoginItemSettings({ openAtLogin: !!b }); });
-ipcMain.on('quit', () => app.quit());
+// Aufräumen: alte Taskleiste und Fensterrahmen zurückgeben, Helfer beenden.
+function cleanup() {
+  if (quitting) return;
+  quitting = true;
+  sendHelper({ c: 'taskbar', hide: false });
+  sendHelper({ c: 'frames', on: false });
+  if (helper) { try { helper.stdin.end(); } catch (_) {} }
+}
+ipcMain.on('quit', () => { cleanup(); setTimeout(() => app.exit(0), 900); });   // sicher beenden, auch wenn etwas hängt
 
 // Verschieben: Das Fenster folgt dem Mauszeiger, die Insel bleibt im Fenster an ihrem Platz.
 ipcMain.on('drag-start', () => {
@@ -317,10 +325,7 @@ else {
     if (process.env.INSEL_SHOT) require('./dev-shot')(win);   // nur für Entwickler-Bildschirmfotos
   });
   app.on('before-quit', () => {
-    quitting = true;
-    sendHelper({ c: 'taskbar', hide: false });
-    sendHelper({ c: 'frames', on: false });
-    if (helper) { try { helper.stdin.end(); } catch (_) {} }
+    cleanup();
   });
   app.on('window-all-closed', () => { if (!win || win.isDestroyed()) app.quit(); });
 }

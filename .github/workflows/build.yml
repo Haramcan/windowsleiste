@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -52,6 +56,8 @@ jobs:
           sort shots/helper.log | uniq -c
           ls shots/idle.png shots/hub.png shots/music.png
           grep -q "helper: windows" shots/helper.log
+          grep -q "helper: tray" shots/helper.log
+          ls shots/widget-clock.png shots/widget-calendar.png shots/widget-system.png
           grep -q "helper: media" shots/helper.log || echo "::warning::Keine Musik-Daten im Probelauf"
           grep -q "helper: volume" shots/helper.log || echo "::warning::Keine Lautstaerke-Daten (Runner ohne Audiogeraet?)"
           if grep -q "helper: error" shots/helper.log; then echo "::warning::Helfer meldet Fehler"; fi

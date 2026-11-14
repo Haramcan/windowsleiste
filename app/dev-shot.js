@@ -27,6 +27,6 @@ module.exports = win => {
       try { fs.writeFileSync(path.join(out, 'widget-' + kind + '.png'), (await w.webContents.capturePage()).toPNG()); } catch (_) {}
     }
     for (const name of ['clock', 'calendar', 'system']) ipcMain.emit('set-widget', {}, { name, on: false });
-    require('electron').app.exit(0);
+    ipcMain.emit('quit');
   });
 };
