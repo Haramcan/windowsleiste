@@ -198,11 +198,12 @@
     const m = media;
     $('#idleMusic').hidden = !m.has; $('#idleVol').hidden = m.has;
     island.classList.toggle('has-media', !!m.has);
-    $('#idleTitle').textContent = m.has ? [m.title, m.artist].filter(Boolean).join(' · ') : '';
     island.classList.toggle('paused', !(m.has && m.playing));
     $('#mTitle').textContent = m.has ? (m.title || 'Unbekannter Titel') : 'Keine Wiedergabe';
     $('#mArtist').textContent = m.has ? (m.artist || m.app || '') : 'Starte Musik in Spotify, im Browser oder einem anderen Player.';
     $('#chipTitle').textContent = m.has ? (m.title || 'Musik') : 'Keine Wiedergabe';
+    $('#hmTitle').textContent = $('#mTitle').textContent; $('#hmArtist').textContent = m.has ? (m.artist || m.app || '') : '';
+    $('#hPlayIcon').setAttribute('d', m.has && m.playing ? 'M4.5 3h3v12h-3zM10.5 3h3v12h-3z' : 'M5 3.2v11.6a.6.6 0 00.92.5l9-5.8a.6.6 0 000-1l-9-5.8a.6.6 0 00-.92.5z');
     $('#playIcon').setAttribute('d', m.has && m.playing ? 'M4.5 3h3v12h-3zM10.5 3h3v12h-3z' : 'M5 3.2v11.6a.6.6 0 00.92.5l9-5.8a.6.6 0 000-1l-9-5.8a.6.6 0 00-.92.5z');
     showPos();
   }
@@ -213,7 +214,9 @@
     if (m.dur > 0) p = Math.min(p, m.dur);
     $('#pos').textContent = fmt(p); $('#dur').textContent = fmt(m.dur || 0);
     $('#fill').style.width = (m.dur > 0 ? p / m.dur * 100 : 0) + '%';
+    $('#hPos').textContent = fmt(p); $('#hDur').textContent = fmt(m.dur || 0); $('#hFill').style.width = $('#fill').style.width;
   }
+  $$('[data-m]').forEach(b => b.addEventListener('click', () => api.helper({ c: 'media', a: b.dataset.m })));
   $('#play').addEventListener('click', () => api.helper({ c: 'media', a: 'toggle' }));
   $('#next').addEventListener('click', () => api.helper({ c: 'media', a: 'next' }));
   $('#prev').addEventListener('click', () => api.helper({ c: 'media', a: 'prev' }));

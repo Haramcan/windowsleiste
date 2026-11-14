@@ -54,10 +54,10 @@ img{-webkit-user-drag:none}
 .island[data-anchor="top"]{top:var(--m)}
 .island[data-anchor="bottom"]{bottom:var(--m)}
 .island.dragging{cursor:grabbing}
-.island.has-media[data-state="idle"]{--w:380px;--h:48px;--r:24px}
 .island[data-state="hub"]{--w:var(--hubw,480px);--h:134px}
 .island[data-state="start"]{--w:560px;--h:436px}
 .island.has-tray[data-state="hub"]{--h:170px}
+.island.has-media[data-state="hub"]{--w:min(calc(var(--hubw,480px) + 300px),780px);--h:178px}
 .island[data-state="music"]{--w:420px;--h:196px}
 .island[data-state="quick"]{--w:400px;--h:344px}
 .island[data-state="look"]{--w:400px;--h:252px}
@@ -78,8 +78,6 @@ img{-webkit-user-drag:none}
 .idle-btn{height:34px;border-radius:999px;padding:0 9px;display:flex;align-items:center;gap:9px}
 .idle-btn:hover{background:var(--fill-hover)}
 .clock{font-size:13px;font-weight:600}
-#idleMusic{min-width:0;flex:0 1 auto;max-width:250px}
-.idle-title{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .cover{background-color:#2a2d36;background-image:var(--art);background-size:cover;background-position:center}
 
 /* Startmenü der Insel */
@@ -105,7 +103,15 @@ img{-webkit-user-drag:none}
 @keyframes eq{0%,100%{height:25%}50%{height:100%}}
 
 /* Übersicht */
-.v-hub{flex-direction:column;justify-content:space-between;padding:14px 16px 16px}
+.v-hub{flex-direction:row}
+.hub-main{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;padding:14px 16px 16px}
+.hub-music{display:none;width:300px;flex:none;box-sizing:border-box;padding:14px 16px 14px;border-left:1px solid var(--mat-line);flex-direction:column;justify-content:space-between}
+.has-media .hub-music{display:flex}
+.has-media .chip[data-go="music"]{display:none}
+.hm-top{display:flex;align-items:center;gap:12px;min-width:0}
+.hm-art{width:54px;height:54px;border-radius:14px;flex:none;box-shadow:0 6px 16px rgba(0,0,0,.3);cursor:pointer}
+.hm-ctl{display:flex;align-items:center;justify-content:center;gap:6px}
+.hm-ctl .ctl{width:36px;height:36px}
 .apps{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
 .apps::-webkit-scrollbar{display:none}
 .app{position:relative;width:40px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;padding-bottom:4px}
@@ -206,7 +212,6 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </button>
     <button class="idle-btn" id="idleMusic" data-go="music" hidden>
       <span class="mini-art cover"></span>
-      <span class="idle-title" id="idleTitle"></span>
       <span class="eq"><i></i><i></i><i></i><i></i></span>
     </button>
     <button class="idle-btn" id="idleVol" data-go="quick">
@@ -216,6 +221,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
 
   <!-- Übersicht -->
   <div class="view v-hub" data-view="hub">
+   <div class="hub-main">
     <div class="apps" id="apps"></div>
     <div class="tray" id="tray"></div>
     <div class="chips">
@@ -227,6 +233,20 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="9" r="5.2"/><path d="M8 6.5V9l1.8 1.2M6.5 1.5h3"/></svg>
         <span class="num" id="timerChip">12:00</span></button>
     </div>
+   </div>
+   <div class="hub-music">
+    <div class="hm-top">
+      <button class="hm-art cover" data-go="music" title="Große Ansicht mit Lautstärke"></button>
+      <div class="meta"><strong id="hmTitle"></strong><small id="hmArtist"></small></div>
+      <span class="eq"><i></i><i></i><i></i><i></i></span>
+    </div>
+    <div class="prog num"><span id="hPos">0:00</span><div class="bar"><i id="hFill"></i></div><span id="hDur">0:00</span></div>
+    <div class="hm-ctl">
+      <button class="ctl" data-m="prev" title="Vorheriges Lied"><svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor"><path d="M3 3h1.6v12H3zM16 3.6v10.8a.6.6 0 01-.95.5L7 9.5a.6.6 0 010-1l8.05-5.4a.6.6 0 01.95.5z"/></svg></button>
+      <button class="ctl play" data-m="toggle" title="Abspielen / Pause"><svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor"><path id="hPlayIcon" d="M5 3.2v11.6a.6.6 0 00.92.5l9-5.8a.6.6 0 000-1l-9-5.8a.6.6 0 00-.92.5z"/></svg></button>
+      <button class="ctl" data-m="next" title="Nächstes Lied"><svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor"><path d="M13.4 3H15v12h-1.6zM2 3.6v10.8a.6.6 0 00.95.5L11 9.5a.6.6 0 000-1L2.95 3.1A.6.6 0 002 3.6z"/></svg></button>
+    </div>
+   </div>
   </div>
 
   <!-- Startmenü -->
