@@ -17,6 +17,31 @@ module.exports = win => {
       await wait(900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
     }
+    // Milchglas-Test: Sieht die Bildschirmaufnahme die Insel selbst? (Soll sie nicht.)
+    if (process.env.INSEL_REAL) {
+      const probe = `(async () => {
+        const v = document.querySelector('#gv');
+        if (!v || !v.srcObject) return 'kein Bild';
+        document.body.style.background = '#ff00ff';
+        await new Promise(r => setTimeout(r, 1500));
+        const c = document.createElement('canvas'); c.width = 160; c.height = 90;
+        const g = c.getContext('2d'); g.drawImage(v, 0, 0, 160, 90);
+        const d = g.getImageData(0, 0, 160, 90).data; let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] < 90 && d[i + 2] > 200) n++;
+        document.body.style.background = '';
+        return n + ' von 14400 Punkten zeigen die Insel';
+      })()`;
+      const log = t => fs.appendFileSync(path.join(out, 'helper.log'), 'glas: ' + t + '\n');
+      try {
+        log('Standard: ' + await win.webContents.executeJavaScript(probe));
+        win.setIgnoreMouseEvents(false); win.setContentProtection(false); win.setContentProtection(true);
+        await wait(800);
+        log('ohne Klick-Durchlass: ' + await win.webContents.executeJavaScript(probe));
+        win.setIgnoreMouseEvents(true, { forward: true });
+        await wait(800);
+        log('Durchlass wieder an: ' + await win.webContents.executeJavaScript(probe));
+      } catch (e) { log('Fehler ' + e.message); }
+    }
     // Widgets einmal öffnen und abbilden
     const { ipcMain, BrowserWindow } = require('electron');
     for (const name of ['clock', 'calendar', 'system']) ipcMain.emit('set-widget', {}, { name, on: true });
