@@ -59,8 +59,8 @@ img{-webkit-user-drag:none}
 .island[data-state="start"]{--w:560px;--h:436px}
 .island.has-tray[data-state="hub"]{--h:170px}
 .island[data-state="music"]{--w:420px;--h:196px}
-.island[data-state="quick"]{--w:400px;--h:298px}
-.island[data-state="look"]{--w:400px;--h:298px}
+.island[data-state="quick"]{--w:400px;--h:344px}
+.island[data-state="look"]{--w:400px;--h:252px}
 .island[data-state="widgets"]{--w:400px;--h:160px}
 .island[data-state="notif"]{--w:400px;--h:264px}
 .island[data-state="timer"]{--w:330px;--h:156px}
@@ -270,6 +270,10 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <button class="tog" id="tTaskbar" aria-pressed="false">Taskleiste ausblenden</button>
     </div>
     <div class="toggles">
+      <button class="tog" id="tLock" aria-pressed="false">Position sperren</button>
+      <button class="tog" id="tClear" aria-pressed="false">Durchsichtig</button>
+    </div>
+    <div class="toggles">
       <button class="tog" id="tAuto" aria-pressed="false">Mit Windows starten</button>
       <button class="tog plain" id="quit">Insel beenden</button>
     </div>
@@ -296,10 +300,6 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </div>
     <div class="toggles">
       <button class="tog" id="tLive" aria-pressed="false">Live-Milchglas (im Stream unsichtbar)</button>
-    </div>
-    <div class="toggles">
-      <button class="tog" id="tClear" aria-pressed="false">Durchsichtig</button>
-      <button class="tog" id="tLock" aria-pressed="false">Position sperren</button>
     </div>
     <div class="toggles">
       <button class="tog" id="bWall">Hintergrundbild wählen …</button>
