@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows:
@@ -34,8 +34,39 @@ jobs:
         working-directory: app
         run: npm run dist
 
+      - name: Probelauf unter Windows
+        working-directory: app
+        shell: bash
+        run: |
+          mkdir -p shots
+          INSEL_SHOT=shots INSEL_REAL=1 timeout 120 npx electron . || true
+          cat shots/helper.log
+          ls shots/idle.png shots/hub.png shots/music.png
+          grep -q "helper: windows" shots/helper.log
+          grep -q "helper: media" shots/helper.log || echo "::warning::Keine Musik-Daten im Probelauf"
+          grep -q "helper: volume" shots/helper.log || echo "::warning::Keine Lautstaerke-Daten (Runner ohne Audiogeraet?)"
+          if grep -q "helper: error" shots/helper.log; then echo "::warning::Helfer meldet Fehler"; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Probelauf-Bilder
+          path: app/shots
+
       - uses: actions/upload-artifact@v4
         with:
           name: Insel-Leiste-Setup
           path: app/dist/Insel-Leiste-Setup.exe
           if-no-files-found: error
+
+      - name: Vorschau zum Herunterladen veröffentlichen
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete vorschau --cleanup-tag --yes || true
+          sleep 5
+          gh release create vorschau app/dist/Insel-Leiste-Setup.exe --prerelease --target "$GITHUB_SHA" \
+            --title "Insel-Leiste Vorschau" \
+            --notes "Aktueller Entwicklungsstand. Insel-Leiste-Setup.exe herunterladen und starten. Windows warnt, weil die Datei nicht signiert ist: Weitere Informationen > Trotzdem ausfuehren."

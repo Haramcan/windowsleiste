@@ -116,6 +116,7 @@ function startHelper() {
   helper.on('exit', () => { helper = null; if (!quitting) setTimeout(startHelper, 2000); });
   readline.createInterface({ input: helper.stdout }).on('line', line => {
     let ev; try { ev = JSON.parse(line); } catch (_) { return; }
+    if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'fullscreen') {
       hiddenForFullscreen = !!ev.on;
@@ -132,7 +133,7 @@ function createWindow() {
     width: WIN_W, height: WIN_H, show: false,
     frame: false, transparent: true, resizable: false, movable: false, hasShadow: false,
     skipTaskbar: true, focusable: false, alwaysOnTop: true, fullscreenable: false, maximizable: false, minimizable: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
@@ -195,6 +196,10 @@ ipcMain.on('drag-end', (_e, rect) => {
   cfg.pos = { cx: Math.round(cx), y: Math.round(anchor === 'bottom' ? top + rect.height : top), anchor };
   saveCfg(); applyPos();
 });
+
+// Animationen sollen nie gedrosselt werden, auch wenn die Insel nie den Fokus hat.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {

@@ -15,8 +15,8 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 
 ## Installieren
 
-1. Auf GitHub oben auf **Actions** klicken und den neuesten Lauf mit grünem Haken öffnen.
-2. Unten bei **Artifacts** `Insel-Leiste-Setup` herunterladen und die ZIP-Datei entpacken.
+1. Rechts auf der GitHub-Seite unter **Releases** die „Insel-Leiste Vorschau“ öffnen.
+2. `Insel-Leiste-Setup.exe` herunterladen.
 3. `Insel-Leiste-Setup.exe` starten. Windows warnt beim ersten Mal, weil die Datei nicht signiert ist: **Weitere Informationen → Trotzdem ausführen**.
 
 ## Bedienung

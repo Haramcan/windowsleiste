@@ -14,7 +14,7 @@
   // Außerhalb der Insel ist das Fenster für die Maus durchlässig.
   island.addEventListener('mouseenter', () => {
     hover = true; api.ignore(false); clearTimeout(leaveT);
-    if (state === 'idle' && !drag) setState('hub');
+    if ((state === 'idle' || state === 'vol') && !drag) { clearTimeout(volT); setState('hub'); }
   });
   island.addEventListener('mouseleave', e => {
     hover = false;
@@ -23,7 +23,7 @@
   });
   function scheduleClose() {
     clearTimeout(leaveT);
-    leaveT = setTimeout(() => { if (state !== 'toast' && !hover) setState('idle'); }, 450);
+    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !hover) setState('idle'); }, 450);
   }
   island.addEventListener('click', e => { if (Date.now() - dragEnd < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   island.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) setState(g.dataset.go); });
@@ -130,11 +130,18 @@
   $('#prev').addEventListener('click', () => api.helper({ c: 'media', a: 'prev' }));
 
   // ---------- Lautstärke ----------
+  let volT = null, lastVol = null;
+  // Lautstärke über Tastatur oder Windows geändert: kurz in der Insel zeigen
+  function volOsd(v, muted) {
+    $('#volFill').style.width = (muted ? 0 : v) + '%'; $('#volOsd').textContent = muted ? 'Stumm' : v;
+    if (state !== 'idle' && state !== 'vol') return;
+    setState('vol'); clearTimeout(volT); volT = setTimeout(() => { if (state === 'vol') setState('idle'); }, 1400);
+  }
   function showVol(v, muted) {
     $('#volMusic').value = v; $('#volQuick').value = v; $('#volVal').textContent = v;
     $('#tMute').setAttribute('aria-pressed', !!muted);
   }
-  function sendVol(e) { const v = +e.target.value; showVol(v, false); api.helper({ c: 'volume', v: v / 100 }); }
+  function sendVol(e) { const v = +e.target.value; showVol(v, false); lastVol = v + '|false'; api.helper({ c: 'volume', v: v / 100 }); }
   $('#volMusic').addEventListener('input', sendVol);
   $('#volQuick').addEventListener('input', sendVol);
   $('#tMute').addEventListener('click', () => api.helper({ c: 'mute' }));
@@ -164,7 +171,12 @@
   api.on('ev', ev => {
     if (ev.t === 'media') { media = Object.assign({ at: Date.now() }, ev); showMedia(); }
     else if (ev.t === 'thumb') island.style.setProperty('--art', ev.data ? 'url("' + ev.data + '")' : noArt);
-    else if (ev.t === 'volume') showVol(Math.round(ev.level * 100), ev.muted);
+    else if (ev.t === 'volume') {
+      const v = Math.round(ev.level * 100), key = v + '|' + ev.muted;
+      showVol(v, ev.muted);
+      if (lastVol !== null && key !== lastVol) volOsd(v, ev.muted);
+      lastVol = key;
+    }
     else if (ev.t === 'toast') toast(ev.m);
   });
 
