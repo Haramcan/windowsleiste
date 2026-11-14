@@ -7,12 +7,12 @@ const { spawn } = require('child_process');
 const readline = require('readline');
 const os = require('os');
 
-const WIN_W = 820, WIN_H = 380;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
+const WIN_W = 820, WIN_H = 500;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
 const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, locked: false, clear: false, hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
 let lastTray = { t: 'tray', ok: false, icons: [] };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
@@ -136,6 +136,7 @@ function startHelper() {
     if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
+    else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
     else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
     else if (ev.t === 'fullscreen') {
       if (process.env.INSEL_SHOT) return;   // im Probelauf immer sichtbar bleiben
@@ -224,6 +225,7 @@ function createWindow() {
   win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => { applyPos(); if (!hiddenForFullscreen) win.showInactive(); protect(); });
+  win.on('blur', () => send('ev', { t: 'blur' }));
   screen.on('display-metrics-changed', applyPos);
   screen.on('display-removed', applyPos);
 }
@@ -231,7 +233,7 @@ function createWindow() {
 ipcMain.handle('ready', () => {
   setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: cfg.glass, wall: wallpaperUrl(), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
+           glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
@@ -263,6 +265,67 @@ function wallpaperUrl() {
   return wallCache.url;
 }
 setInterval(() => { const before = wallCache.url, now = wallpaperUrl(); if (now !== before) send('ev', { t: 'wall', data: now }); }, 4000);
+ipcMain.on('set-locked', (_e, b) => { cfg.locked = !!b; saveCfg(); });
+ipcMain.on('set-clear', (_e, b) => { cfg.clear = !!b; saveCfg(); });
+
+// ---------- Eigenes Startmenü ----------
+// Liste aller Programme, wie sie auch das Windows-Startmenü kennt (inklusive Store-Apps).
+let startApps = [], startAppsAt = 0, startLoading = null;
+const startIcons = new Map(), iconWait = new Map();
+function loadStartApps() {
+  if (process.platform !== 'win32') return Promise.resolve(startApps);
+  if (startLoading) return startLoading;
+  startLoading = new Promise(resolve => {
+    let out = '';
+    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-StartApps | Sort-Object Name | ConvertTo-Json -Compress'], { windowsHide: true });
+    ps.stdout.on('data', d => { out += d.toString('utf8'); });
+    const done = () => {
+      try {
+        let list = JSON.parse(out); if (!Array.isArray(list)) list = [list];
+        const seen = new Set();
+        startApps = list.filter(a => a && a.Name && a.AppID && !/uninstall|deinstall|entfernen/i.test(a.Name))
+          .filter(a => !seen.has(a.Name) && seen.add(a.Name)).map(a => ({ name: a.Name, id: a.AppID }));
+        startAppsAt = Date.now();
+      } catch (_) {}
+      startLoading = null; resolve(startApps);
+    };
+    ps.on('error', done); ps.on('close', done);
+  });
+  return startLoading;
+}
+ipcMain.handle('start-apps', async () => {
+  if (!startApps.length) await loadStartApps();
+  else if (Date.now() - startAppsAt > 120000) loadStartApps();
+  return startApps;
+});
+ipcMain.handle('start-icons', async (_e, ids) => {
+  const res = {};
+  await Promise.all((ids || []).slice(0, 60).map(id => new Promise(resolve => {
+    if (startIcons.has(id)) { res[id] = startIcons.get(id); return resolve(); }
+    if (!helper) { res[id] = ''; return resolve(); }
+    const t = setTimeout(() => { iconWait.delete(id); res[id] = ''; resolve(); }, 4000);
+    iconWait.set(id, data => { clearTimeout(t); res[id] = data; resolve(); });
+    sendHelper({ c: 'appicon', id });
+  })));
+  return res;
+});
+ipcMain.on('start-launch', (_e, id) => {
+  if (!startApps.some(a => a.id === id)) return;
+  try { spawn('explorer.exe', ['shell:AppsFolder\\' + id], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+});
+ipcMain.on('power', (_e, kind) => {
+  const run = (cmd, args) => { try { spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch (_) {} };
+  if (kind === 'lock') run('rundll32.exe', ['user32.dll,LockWorkStation']);
+  else if (kind === 'restart') { cleanup(); run('shutdown.exe', ['/r', '/t', '0']); }
+  else if (kind === 'off') { cleanup(); run('shutdown.exe', ['/s', '/t', '0']); }
+});
+// Für die Suche braucht die Insel kurz die Tastatur; sonst nimmt sie anderen Fenstern nie den Fokus weg.
+ipcMain.on('focus', (_e, b) => {
+  if (!win || win.isDestroyed()) return;
+  if (b) { win.setFocusable(true); win.setIgnoreMouseEvents(false); win.focus(); }
+  else { win.blur(); win.setFocusable(false); }
+});
 ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });
 ipcMain.on('set-theme', (_e, light) => sendHelper({ c: 'theme', light: !!light }));
 ipcMain.on('desk-icons', () => sendHelper({ c: 'deskicons' }));
@@ -349,7 +412,7 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
-    loadCfg(); createWindow(); startHelper();
+    loadCfg(); createWindow(); startHelper(); loadStartApps();
     for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);
     if (process.env.INSEL_SHOT) require('./dev-shot')(win);   // nur für Entwickler-Bildschirmfotos
   });

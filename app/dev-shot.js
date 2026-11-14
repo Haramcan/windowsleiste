@@ -12,9 +12,9 @@ module.exports = win => {
     win.webContents.send('ev', { t: 'volume', level: 0.6, muted: false });
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'tray', ok: true, icons: [{ id: 'a', title: 'Discord', icon: dot }, { id: 'b', title: 'Steam', icon: '' }, { id: 'c', title: 'Virenschutz', icon: dot }] });
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'notifyState', on: true, apps: [{ name: 'Discord', on: true }, { name: 'Mail', on: false }, { name: 'Steam', on: true }] });
-    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'timer', 'vol']) {
-      await win.webContents.executeJavaScript(`document.querySelector('#island').dataset.state='${s}'`);
-      await wait(900);
+    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'timer', 'vol', 'start']) {
+      await win.webContents.executeJavaScript(s === 'start' ? `document.querySelector('[data-start]').click()` : `document.querySelector('#island').dataset.state='${s}'`);
+      await wait(s === 'start' ? 6000 : 900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
     }
     // Milchglas-Test: Sieht die Bildschirmaufnahme die Insel selbst? (Soll sie nicht.)

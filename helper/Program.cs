@@ -71,6 +71,9 @@ internal static class Program
             case "wallpaper": Look.SetWallpaper(r.GetProperty("path").GetString() ?? ""); break;
             case "frames": Frames.Set(r.GetProperty("on").GetBoolean()); break;
             case "notify": Notifications.Enabled = r.GetProperty("on").GetBoolean(); break;
+            case "appicon":
+                { var id = r.GetProperty("id").GetString() ?? ""; Emit(new { t = "appicon", id, data = AppIcons.Get(id) }); }
+                break;
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
             case "bottom":   // Widgets liegen auf dem Desktop, hinter allen Fenstern
                 Native.SetWindowPos(new IntPtr(r.GetProperty("h").GetInt64()), new IntPtr(1) /* HWND_BOTTOM */, 0, 0, 0, 0, 0x13 /* NOSIZE|NOMOVE|NOACTIVATE */);
@@ -120,6 +123,7 @@ internal static class Media
 {
     private static GlobalSystemMediaTransportControlsSessionManager? mgr;
     private static string lastState = "", thumbKey = "", thumb = "";
+    private static int thumbTick;
 
     public static async Task Poll(Action<object> emit)
     {
@@ -146,7 +150,8 @@ internal static class Media
 
         // Cover nur neu laden, wenn der Titel wechselt (oder es noch fehlt)
         string key = title + "|" + artist;
-        if (key != thumbKey || thumb == "")
+        // Das Cover kommt oft etwas später als der Titel: regelmäßig neu lesen, damit nicht das alte Bild hängen bleibt.
+        if (key != thumbKey || thumb == "" || ++thumbTick % 2 == 0)
         {
             var data = await ReadThumb(p?.Thumbnail);
             if (key != thumbKey || data != thumb) { thumbKey = key; thumb = data; emit(new { t = "thumb", data }); }

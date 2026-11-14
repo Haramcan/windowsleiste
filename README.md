@@ -14,7 +14,8 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Alte Taskleiste ausgeblendet**, beim Beenden kommt sie zurück
 - **Aussehen:** heller/dunkler Modus, Desktop-Symbole, Hintergrundbild, Fensterrahmen im Insel-Stil
 - **Widgets** auf dem Desktop: Uhr, Kalender, System
-- **Frei verschieben** – die Position bleibt gespeichert
+- **Eigenes Startmenü** in der Insel: alle Programme mit Suche, dazu Sperren, Neu starten, Herunterfahren
+- **Frei verschieben** oder Position sperren; wahlweise komplett durchsichtig
 - Versteckt sich automatisch bei Spielen und Videos im Vollbild
 - Timer
 

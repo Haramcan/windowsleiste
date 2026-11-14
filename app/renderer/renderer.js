@@ -2,10 +2,14 @@
   const api = window.insel;
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const island = $('#island');
+  let locked = false;
   let state = 'idle', leaveT = null, toastT = null, drag = null, dragEnd = 0, hover = false;
 
   function setState(s) {
+    const was = state;
     state = s; island.dataset.state = s;
+    if (s === 'start' && was !== 'start') openStart();
+    if (was === 'start' && s !== 'start') api.focus(false);
     $$('.view').forEach(v => { v.inert = v.dataset.view !== s; });
   }
   setState('idle');
@@ -23,7 +27,7 @@
   });
   function scheduleClose() {
     clearTimeout(leaveT);
-    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !hover) setState('idle'); }, 450);
+    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && state !== 'start' && !hover) setState('idle'); }, 450);
   }
   island.addEventListener('click', e => { if (Date.now() - dragEnd < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   island.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) setState(g.dataset.go); });
@@ -35,7 +39,7 @@
 
   // ---------- Verschieben ----------
   island.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.target.closest('input')) return;
+    if (locked || e.button !== 0 || e.target.closest('input')) return;
     drag = { id: e.pointerId, x: e.screenX, y: e.screenY, moved: false };
   });
   window.addEventListener('pointermove', e => {
@@ -146,7 +150,7 @@
   renderApps({ pins: [], others: [] });
   api.on('apps', renderApps);
   $('#apps').addEventListener('click', e => {
-    if (e.target.closest('[data-start]')) return api.helper({ c: 'start' });
+    if (e.target.closest('[data-start]')) return setState('start');
     if (e.target.closest('[data-add]')) { setState('idle'); return api.pinAdd(); }
     const b = e.target.closest('[data-kind]');
     if (b) api.appClick(b.dataset.kind, +b.dataset.i);
@@ -182,6 +186,8 @@
   function showMedia() {
     const m = media;
     $('#idleMusic').hidden = !m.has; $('#idleVol').hidden = m.has;
+    island.classList.toggle('has-media', !!m.has);
+    $('#idleTitle').textContent = m.has ? [m.title, m.artist].filter(Boolean).join(' · ') : '';
     island.classList.toggle('paused', !(m.has && m.playing));
     $('#mTitle').textContent = m.has ? (m.title || 'Unbekannter Titel') : 'Keine Wiedergabe';
     $('#mArtist').textContent = m.has ? (m.artist || m.app || '') : 'Starte Musik in Spotify, im Browser oder einem anderen Player.';
@@ -227,6 +233,49 @@
   $('#tGlass').addEventListener('click', () => setGlassMode(glassMode ? false : 'bild'));
   $('#tLive').addEventListener('click', () => setGlassMode(glassMode === 'live' ? 'bild' : 'live'));
   toggle('#tFrames', api.setFrames);
+  toggle('#tLock', on => { locked = on; api.setLocked(on); });
+  toggle('#tClear', on => { island.classList.toggle('clear', on); api.setClear(on); });
+
+  // ---------- Startmenü ----------
+  let allApps = [], shown = [], sel = 0, iconUrls = {};
+  const sGrid = $('#sGrid'), sSearch = $('#sSearch');
+  function drawStart() {
+    const q = sSearch.value.trim().toLowerCase();
+    shown = (q ? allApps.filter(a => a.name.toLowerCase().includes(q)).sort((a, b) => a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q)) : allApps).slice(0, 60);
+    sel = 0;
+    sGrid.innerHTML = shown.length ? shown.map((a, i) => '<button class="s-app' + (i === 0 && q ? ' sel' : '') + '" data-si="' + i + '" style="--i:' + Math.min(i, 14) + '" title="' + esc(a.name) + '">' +
+      (iconUrls[a.id] ? '<img src="' + esc(iconUrls[a.id]) + '" alt="">' : '<span class="letter">' + esc(a.name.charAt(0).toUpperCase()) + '</span>') +
+      '<span class="n">' + esc(a.name) + '</span></button>').join('') : '<div class="s-empty">' + (allApps.length ? 'Nichts gefunden.' : 'Programme werden geladen …') + '</div>';
+    sGrid.scrollTop = 0;
+    const need = shown.filter(a => !(a.id in iconUrls)).map(a => a.id);
+    if (need.length) api.startIcons(need).then(res => {
+      Object.assign(iconUrls, res);
+      shown.forEach((a, i) => { const b = sGrid.querySelector('[data-si="' + i + '"] .letter'); if (b && iconUrls[a.id]) b.outerHTML = '<img src="' + esc(iconUrls[a.id]) + '" alt="">'; });
+    });
+  }
+  function openStart() {
+    sSearch.value = ''; drawStart(); $$('[data-power]').forEach(resetPower);
+    api.focus(true); setTimeout(() => sSearch.focus(), 60);
+    api.startApps().then(list => { allApps = list || []; if (state === 'start') drawStart(); });
+  }
+  function launch(i) { if (shown[i]) { api.startLaunch(shown[i].id); setState('idle'); } }
+  sSearch.addEventListener('input', drawStart);
+  sSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') launch(sel);
+    else if (e.key === 'Escape') setState('idle');
+  });
+  sGrid.addEventListener('click', e => { const b = e.target.closest('[data-si]'); if (b) launch(+b.dataset.si); });
+  // Ausschalten und Neustart brauchen einen zweiten Klick zur Bestätigung.
+  const powerText = { lock: 'Sperren', restart: 'Neu starten', off: 'Herunterfahren' };
+  function resetPower(b) { b.textContent = powerText[b.dataset.power]; b.removeAttribute('aria-pressed'); }
+  $$('[data-power]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.power;
+    if (k === 'lock') { api.power('lock'); return setState('idle'); }
+    if (b.getAttribute('aria-pressed') === 'true') return api.power(k);
+    $$('[data-power]').forEach(resetPower);
+    b.setAttribute('aria-pressed', 'true'); b.textContent = 'Wirklich? Nochmal klicken';
+    setTimeout(() => resetPower(b), 4000);
+  }));
   toggle('#tLight', api.setTheme);
   $('#bIcons').addEventListener('click', () => api.deskIcons());
   $('#bWall').addEventListener('click', () => { setState('idle'); api.wallpaper(); });
@@ -270,6 +319,7 @@
       lastVol = key;
     }
     else if (ev.t === 'toast') toast(ev.m);
+    else if (ev.t === 'blur') { if (state === 'start') setState('idle'); }
     else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
     else if (ev.t === 'notifyState') showNotifyState(ev);
@@ -283,6 +333,8 @@
     $('#tTaskbar').setAttribute('aria-pressed', !!s.hideTaskbar);
     $('#tAuto').setAttribute('aria-pressed', !!s.autostart);
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
+    locked = !!s.locked; $('#tLock').setAttribute('aria-pressed', locked);
+    island.classList.toggle('clear', !!s.clear); $('#tClear').setAttribute('aria-pressed', !!s.clear);
     showNotifyState(s.notify);
     (s.widgets || []).forEach(w => { const b = document.querySelector('[data-widget="' + w.name + '"]'); if (b) b.setAttribute('aria-pressed', !!w.on); });
     glassMode = s.glass || false; wallUrl = s.wall || ''; showGlassToggles(); setTimeout(applyGlass, 300);
