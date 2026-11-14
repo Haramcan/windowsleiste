@@ -34,6 +34,10 @@ jobs:
         working-directory: app
         run: npm ci
 
+      - name: Versionsnummer setzen
+        working-directory: app
+        run: npm version 0.1.${{ github.run_number }} --no-git-tag-version
+
       - name: Installationsdatei bauen
         working-directory: app
         run: npm run dist
@@ -84,6 +88,7 @@ jobs:
         run: |
           gh release delete vorschau --cleanup-tag --yes || true
           sleep 5
-          gh release create vorschau app/dist/Insel-Leiste-Setup.exe --prerelease --target "$GITHUB_SHA" \
+          ls app/dist/latest.yml
+          gh release create vorschau app/dist/Insel-Leiste-Setup.exe app/dist/Insel-Leiste-Setup.exe.blockmap app/dist/latest.yml --prerelease --target "$GITHUB_SHA" \
             --title "Insel-Leiste Vorschau" \
             --notes "Aktueller Entwicklungsstand. Insel-Leiste-Setup.exe herunterladen und starten. Windows warnt, weil die Datei nicht signiert ist: Weitere Informationen > Trotzdem ausfuehren."

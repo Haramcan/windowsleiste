@@ -17,10 +17,37 @@
   "build": {
     "appId": "de.inselleiste.app",
     "productName": "Insel-Leiste",
-    "directories": { "output": "dist" },
-    "files": ["main.js", "preload.js", "preload-widget.js", "renderer/**"],
-    "extraResources": [{ "from": "helper-bin", "to": "helper" }],
-    "win": { "target": "nsis" },
-    "nsis": { "oneClick": true, "perMachine": false, "artifactName": "Insel-Leiste-Setup.exe" }
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-widget.js",
+      "renderer/**"
+    ],
+    "extraResources": [
+      {
+        "from": "helper-bin",
+        "to": "helper"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Insel-Leiste-Setup.exe"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/Haramcan/windowsleiste/releases/download/vorschau"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

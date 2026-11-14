@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('insel', {
   startLaunch: id => ipcRenderer.send('start-launch', id),
   power: kind => ipcRenderer.send('power', kind),
   focus: b => ipcRenderer.send('focus', b),
+  updateCheck: () => ipcRenderer.send('update-check'),
+  updateInstall: () => ipcRenderer.send('update-install'),
   trayClick: (id, b) => ipcRenderer.send('tray-click', { id, b }),
   setWidget: (name, on) => ipcRenderer.send('set-widget', { name, on }),
   setNotifyApp: (name, on) => ipcRenderer.send('set-notify-app', { name, on }),

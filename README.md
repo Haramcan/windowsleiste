@@ -18,6 +18,7 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Frei verschieben** oder Position sperren; wahlweise komplett durchsichtig
 - Versteckt sich automatisch bei Spielen und Videos im Vollbild
 - Timer
+- **Automatische Updates:** Die Insel lädt neue Versionen selbst; installiert wird per Klick unter „Regler“ oder beim nächsten Beenden
 
 ## Installieren
 

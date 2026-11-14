@@ -231,7 +231,7 @@ function createWindow() {
 }
 
 ipcMain.handle('ready', () => {
-  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); });
+  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', updateState); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
            glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
@@ -405,6 +405,31 @@ ipcMain.on('drag-end', (_e, rect) => {
   saveCfg(); applyPos();
 });
 
+// ---------- Updates ----------
+// Die Insel holt neue Versionen selbst von GitHub; installiert wird per Klick oder beim nächsten Beenden.
+let updater = null, updateState = { t: 'update', state: 'idle', version: app.getVersion(), next: '' };
+function setUpdate(state, next) { updateState = { t: 'update', state, version: app.getVersion(), next: next || updateState.next }; send('ev', updateState); }
+function initUpdates() {
+  if (!app.isPackaged) return;
+  try {
+    updater = require('electron-updater').autoUpdater;
+    updater.autoDownload = true; updater.autoInstallOnAppQuit = true;
+    updater.on('checking-for-update', () => setUpdate('checking'));
+    updater.on('update-available', i => setUpdate('loading', i.version));
+    updater.on('update-not-available', () => setUpdate('current'));
+    updater.on('update-downloaded', i => setUpdate('ready', i.version));
+    updater.on('error', () => setUpdate('error'));
+    const check = () => { updater.checkForUpdates().catch(() => setUpdate('error')); };
+    setTimeout(check, 8000); setInterval(check, 60 * 60 * 1000);
+  } catch (_) { updater = null; }
+}
+ipcMain.on('update-check', () => { if (updater && updateState.state !== 'loading' && updateState.state !== 'ready') updater.checkForUpdates().catch(() => setUpdate('error')); });
+ipcMain.on('update-install', () => {
+  if (!updater || updateState.state !== 'ready') return;
+  cleanup();
+  setTimeout(() => { try { updater.quitAndInstall(true, true); } catch (_) {} setTimeout(() => app.exit(0), 4000); }, 600);
+});
+
 // Animationen sollen nie gedrosselt werden, auch wenn die Insel nie den Fokus hat.
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -412,7 +437,7 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
-    loadCfg(); createWindow(); startHelper(); loadStartApps();
+    loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates();
     for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);
     if (process.env.INSEL_SHOT) require('./dev-shot')(win);   // nur für Entwickler-Bildschirmfotos
   });

@@ -236,6 +236,22 @@
   toggle('#tLock', on => { locked = on; api.setLocked(on); });
   toggle('#tClear', on => { island.classList.toggle('clear', on); api.setClear(on); });
 
+  // ---------- Updates ----------
+  let upd = { state: 'idle', version: '' }, updToastFor = '';
+  function showUpdate(u) {
+    upd = u;
+    const b = $('#bUpdate'), v = 'Version ' + u.version;
+    b.setAttribute('aria-pressed', u.state === 'ready');
+    b.textContent = u.state === 'checking' ? 'Suche nach Updates …'
+      : u.state === 'loading' ? 'Update ' + u.next + ' wird geladen …'
+      : u.state === 'ready' ? 'Update ' + u.next + ' jetzt installieren'
+      : u.state === 'current' ? v + ' · aktuell'
+      : u.state === 'error' ? v + ' · Suche fehlgeschlagen, nochmal versuchen'
+      : v + ' · nach Updates suchen';
+    if (u.state === 'ready' && updToastFor !== u.next && (state === 'idle' || state === 'vol')) { updToastFor = u.next; toast('Regler → Update installieren', 6000, 'Update ' + u.next + ' ist bereit'); }
+  }
+  $('#bUpdate').addEventListener('click', () => { if (upd.state === 'ready') api.updateInstall(); else api.updateCheck(); });
+
   // ---------- Startmenü ----------
   let allApps = [], shown = [], sel = 0, iconUrls = {};
   const sGrid = $('#sGrid'), sSearch = $('#sSearch');
@@ -319,6 +335,7 @@
       lastVol = key;
     }
     else if (ev.t === 'toast') toast(ev.m);
+    else if (ev.t === 'update') showUpdate(ev);
     else if (ev.t === 'blur') { if (state === 'start') setState('idle'); }
     else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
