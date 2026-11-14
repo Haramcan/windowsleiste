@@ -37,7 +37,8 @@ img{-webkit-user-drag:none}
 .glass{position:absolute;inset:-48px;overflow:hidden;filter:blur(20px) saturate(1.8);pointer-events:none}
 .glass .anchor{position:absolute;left:50%;top:48px;width:0;height:0}
 .island[data-anchor="bottom"] .glass .anchor{top:auto;bottom:48px}
-.glass video{position:absolute;left:var(--vx,0);top:var(--vy,0);width:var(--vw,0);height:var(--vh,0);max-width:none;object-fit:fill}
+.glass video,.glass img{position:absolute;left:var(--vx,0);top:var(--vy,0);width:var(--vw,0);height:var(--vh,0);max-width:none;object-fit:fill}
+.glass img{object-fit:cover}
 .tint{position:absolute;inset:0;background:var(--mat);pointer-events:none;transition:background .3s}
 .island.glassy .tint{background:var(--mat-glass)}
 .sheen{position:absolute;inset:0;border-radius:inherit;pointer-events:none;
@@ -50,7 +51,7 @@ img{-webkit-user-drag:none}
 .island.has-tray[data-state="hub"]{--h:170px}
 .island[data-state="music"]{--w:420px;--h:196px}
 .island[data-state="quick"]{--w:400px;--h:252px}
-.island[data-state="look"]{--w:400px;--h:206px}
+.island[data-state="look"]{--w:400px;--h:252px}
 .island[data-state="widgets"]{--w:400px;--h:160px}
 .island[data-state="notif"]{--w:400px;--h:264px}
 .island[data-state="timer"]{--w:330px;--h:156px}
@@ -167,7 +168,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
 </head>
 <body>
 <div class="island paused" id="island" data-state="idle" data-anchor="top">
-  <div class="glass" id="glass" hidden><div class="anchor"><video id="gv" muted playsinline></video></div></div>
+  <div class="glass" id="glass" hidden><div class="anchor"><video id="gv" muted playsinline></video><img id="gi" alt="" hidden></div></div>
   <div class="tint"></div><div class="sheen"></div>
   <!-- Ruhezustand -->
   <div class="view v-idle" data-view="idle">
@@ -249,6 +250,9 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     <div class="toggles">
       <button class="tog" id="tLight" aria-pressed="false">Heller Modus</button>
       <button class="tog" id="bIcons">Desktop-Symbole ein/aus</button>
+    </div>
+    <div class="toggles">
+      <button class="tog" id="tLive" aria-pressed="false">Live-Milchglas (im Stream unsichtbar)</button>
     </div>
     <div class="toggles">
       <button class="tog" id="bWall">Hintergrundbild wählen …</button>

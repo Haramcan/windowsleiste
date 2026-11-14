@@ -88,6 +88,7 @@
   function stopGlass() {
     if (glassStream) glassStream.getTracks().forEach(t => t.stop());
     glassStream = null; glassDisplay = null; gv.srcObject = null;
+    $('#gv').hidden = true; $('#gi').hidden = true;
     $('#glass').hidden = true; island.classList.remove('glassy');
   }
   async function startGlass() {
@@ -99,11 +100,26 @@
       const id = await api.glassSource(want);
       if (!id || !glassOn) return;
       glassStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: id, maxWidth: 640, maxHeight: 400, maxFrameRate: 24 } } });
-      glassDisplay = want; gv.srcObject = glassStream; await gv.play();
+      glassDisplay = want; gv.srcObject = glassStream; gv.hidden = false; await gv.play();
       $('#glass').hidden = false; island.classList.add('glassy'); placeGlass();
     } catch (_) { stopGlass(); }
   }
-  function setGlass(on) { glassOn = on; if (on) startGlass(); else stopGlass(); }
+  // Zwei Arten: 'bild' = unscharfes Hintergrundbild (auch im Stream sichtbar), 'live' = echtes Live-Bild.
+  let glassMode = false, wallUrl = '';
+  function applyGlass() {
+    glassOn = glassMode === 'live';
+    stopGlass();
+    if (glassOn) return startGlass();
+    if (glassMode === 'bild' && wallUrl) {
+      $('#gi').src = wallUrl; $('#gi').hidden = false;
+      $('#glass').hidden = false; island.classList.add('glassy'); placeGlass();
+    }
+  }
+  function showGlassToggles() {
+    $('#tGlass').setAttribute('aria-pressed', !!glassMode);
+    $('#tLive').setAttribute('aria-pressed', glassMode === 'live');
+  }
+  function setGlassMode(mode) { glassMode = mode; showGlassToggles(); api.setGlass(mode); setTimeout(applyGlass, 150); }
 
   // ---------- Programme ----------
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -208,7 +224,8 @@
   }
   toggle('#tTaskbar', api.setHideTaskbar);
   toggle('#tAuto', api.setAutostart);
-  toggle('#tGlass', on => { api.setGlass(on); setTimeout(() => setGlass(on), 150); });
+  $('#tGlass').addEventListener('click', () => setGlassMode(glassMode ? false : 'bild'));
+  $('#tLive').addEventListener('click', () => setGlassMode(glassMode === 'live' ? 'bild' : 'live'));
   toggle('#tFrames', api.setFrames);
   toggle('#tLight', api.setTheme);
   $('#bIcons').addEventListener('click', () => api.deskIcons());
@@ -253,6 +270,7 @@
       lastVol = key;
     }
     else if (ev.t === 'toast') toast(ev.m);
+    else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
     else if (ev.t === 'notifyState') showNotifyState(ev);
     else if (ev.t === 'tray') renderTray(ev);
@@ -264,11 +282,10 @@
   api.ready().then(s => {
     $('#tTaskbar').setAttribute('aria-pressed', !!s.hideTaskbar);
     $('#tAuto').setAttribute('aria-pressed', !!s.autostart);
-    $('#tGlass').setAttribute('aria-pressed', !!s.glass);
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
     showNotifyState(s.notify);
     (s.widgets || []).forEach(w => { const b = document.querySelector('[data-widget="' + w.name + '"]'); if (b) b.setAttribute('aria-pressed', !!w.on); });
-    glassOn = !!s.glass; if (glassOn) setTimeout(startGlass, 300);
+    glassMode = s.glass || false; wallUrl = s.wall || ''; showGlassToggles(); setTimeout(applyGlass, 300);
   });
   showMedia();
 })();

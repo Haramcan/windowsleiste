@@ -10,7 +10,7 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Musik** aus Spotify, Browser und anderen Playern: Titel, Cover, vor, zurück, Pause
 - **Lautstärke** mit Anzeige bei Tastendruck
 - **Mitteilungen** anderer Programme, pro Programm abschaltbar
-- **Milchglas:** Der Hintergrund verschwimmt live hinter der Insel
+- **Milchglas:** Dein Hintergrundbild verschwimmt hinter der Insel. Wahlweise Live-Milchglas, das auch Fenster dahinter zeigt, dann aber in Screenshots und Übertragungen unsichtbar ist
 - **Alte Taskleiste ausgeblendet**, beim Beenden kommt sie zurück
 - **Aussehen:** heller/dunkler Modus, Desktop-Symbole, Hintergrundbild, Fensterrahmen im Insel-Stil
 - **Widgets** auf dem Desktop: Uhr, Kalender, System

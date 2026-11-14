@@ -33,6 +33,9 @@ module.exports = win => {
       })()`;
       const log = t => fs.appendFileSync(path.join(out, 'helper.log'), 'glas: ' + t + '\n');
       try {
+        log('Art beim Start: ' + await win.webContents.executeJavaScript(`document.querySelector('#gi').hidden ? 'kein Hintergrundbild' : 'Hintergrundbild'`));
+        await win.webContents.executeJavaScript(`document.querySelector('#tLive').click()`);
+        await wait(3000);
         log('Standard: ' + await win.webContents.executeJavaScript(probe));
         win.setIgnoreMouseEvents(false); win.setContentProtection(false); win.setContentProtection(true);
         await wait(800);
@@ -40,6 +43,8 @@ module.exports = win => {
         win.setIgnoreMouseEvents(true, { forward: true });
         await wait(800);
         log('Durchlass wieder an: ' + await win.webContents.executeJavaScript(probe));
+        await win.webContents.executeJavaScript(`document.querySelector('#tLive').click()`);
+        await wait(800);
       } catch (e) { log('Fehler ' + e.message); }
     }
     // Widgets einmal öffnen und abbilden

@@ -12,7 +12,7 @@ const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, hideTaskbar: true, glass: true, frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
 let lastTray = { t: 'tray', ok: false, icons: [] };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
@@ -22,6 +22,8 @@ const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
   try { cfg = Object.assign(cfg, JSON.parse(fs.readFileSync(cfgFile(), 'utf8'))); } catch (_) {}
   if (!Array.isArray(cfg.pins)) cfg.pins = [];
+  if (cfg.glass === true) cfg.glass = 'bild';   // früher an/aus; neuer Standard ist das unscharfe Hintergrundbild
+  if (!['bild', 'live'].includes(cfg.glass)) cfg.glass = false;
   if (!cfg.notify || !Array.isArray(cfg.notify.off)) cfg.notify = { on: true, off: [] };
   if (!Array.isArray(cfg.notifyApps)) cfg.notifyApps = [];
   if (!cfg.widgets) cfg.widgets = {};
@@ -208,7 +210,7 @@ function protect() {
   if (!win || win.isDestroyed()) return;
   win.setIgnoreMouseEvents(false);
   win.setContentProtection(false);
-  win.setContentProtection(!!cfg.glass);
+  win.setContentProtection(cfg.glass === 'live');
   win.setIgnoreMouseEvents(true, { forward: true });
 }
 function createWindow() {
@@ -229,19 +231,38 @@ function createWindow() {
 ipcMain.handle('ready', () => {
   setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: !!cfg.glass, frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
+           glass: cfg.glass, wall: wallpaperUrl(), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
 ipcMain.handle('glass-source', async (_e, displayId) => {
-  if (!cfg.glass) return null;
+  if (cfg.glass !== 'live') return null;
   try {
     const list = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
     const s = list.find(x => String(x.display_id) === String(displayId)) || list[0];
     return s ? s.id : null;
   } catch (_) { return null; }
 });
-ipcMain.on('set-glass', (_e, b) => { cfg.glass = !!b; saveCfg(); win.setContentProtection(cfg.glass); });   // Maus ist dabei über der Insel
+ipcMain.on('set-glass', (_e, mode) => {
+  cfg.glass = ['bild', 'live'].includes(mode) ? mode : false; saveCfg();
+  // nur das Live-Milchglas versteckt die Insel vor Aufnahmen (die Maus ist beim Umschalten über der Insel)
+  win.setIgnoreMouseEvents(false); win.setContentProtection(false); win.setContentProtection(cfg.glass === 'live');
+});
+
+// Unscharfes Hintergrundbild: Windows legt das aktuelle Bild als Kopie ab; wir verkleinern es stark.
+const wallFile = () => path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
+let wallCache = { m: -1, url: '' };
+function wallpaperUrl() {
+  try {
+    const m = fs.statSync(wallFile()).mtimeMs;
+    if (m !== wallCache.m) {
+      const img = nativeImage.createFromBuffer(fs.readFileSync(wallFile()));
+      wallCache = { m, url: img.isEmpty() ? '' : 'data:image/jpeg;base64,' + img.resize({ width: 640 }).toJPEG(72).toString('base64') };
+    }
+  } catch (_) { wallCache = { m: -1, url: '' }; }
+  return wallCache.url;
+}
+setInterval(() => { const before = wallCache.url, now = wallpaperUrl(); if (now !== before) send('ev', { t: 'wall', data: now }); }, 4000);
 ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });
 ipcMain.on('set-theme', (_e, light) => sendHelper({ c: 'theme', light: !!light }));
 ipcMain.on('desk-icons', () => sendHelper({ c: 'deskicons' }));
