@@ -5,13 +5,16 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const readline = require('readline');
+const os = require('os');
 
 const WIN_W = 820, WIN_H = 380;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
 const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, hideTaskbar: true, glass: true, frames: false, notify: { on: true, off: [] }, notifyApps: [] };
+let cfg = { pins: [], pos: null, hideTaskbar: true, glass: true, frames: false, notify: { on: true, off: [] }, notifyApps: [],
+            widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
+let lastTray = { t: 'tray', ok: false, icons: [] };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
 const iconCache = new Map();
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json');
@@ -21,6 +24,8 @@ function loadCfg() {
   if (!Array.isArray(cfg.pins)) cfg.pins = [];
   if (!cfg.notify || !Array.isArray(cfg.notify.off)) cfg.notify = { on: true, off: [] };
   if (!Array.isArray(cfg.notifyApps)) cfg.notifyApps = [];
+  if (!cfg.widgets) cfg.widgets = {};
+  for (const k of Object.keys(WIDGETS)) if (!cfg.widgets[k]) cfg.widgets[k] = { on: false };
 }
 function saveCfg() {
   try { fs.mkdirSync(path.dirname(cfgFile()), { recursive: true }); fs.writeFileSync(cfgFile(), JSON.stringify(cfg, null, 2)); } catch (_) {}
@@ -128,7 +133,10 @@ function startHelper() {
     let ev; try { ev = JSON.parse(line); } catch (_) { return; }
     if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
+    else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
+    else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
     else if (ev.t === 'fullscreen') {
+      if (process.env.INSEL_SHOT) return;   // im Probelauf immer sichtbar bleiben
       hiddenForFullscreen = !!ev.on;
       if (win && !win.isDestroyed()) { if (ev.on) win.hide(); else win.showInactive(); }
       send('ev', { t: 'visible', on: !ev.on });
@@ -145,6 +153,53 @@ function startHelper() {
   sendHelper({ c: 'notify', on: !!cfg.notify.on });
 }
 const notifyState = () => ({ t: 'notifyState', on: !!cfg.notify.on, apps: cfg.notifyApps.map(n => ({ name: n, on: !cfg.notify.off.includes(n) })) });
+
+// ---------- Widgets: kleine Glaskarten direkt auf dem Desktop ----------
+const WIDGETS = { clock: { w: 232, h: 132 }, calendar: { w: 232, h: 268 }, system: { w: 232, h: 150 } };
+const widgetWins = {};
+const widgetState = () => Object.keys(WIDGETS).map(k => ({ name: k, on: !!(cfg.widgets[k] && cfg.widgets[k].on) }));
+function sinkWidget(name) {
+  const w = widgetWins[name];
+  if (!w || w.isDestroyed() || process.platform !== 'win32') return;
+  try { sendHelper({ c: 'bottom', h: Number(w.getNativeWindowHandle().readBigUInt64LE(0)) }); } catch (_) {}
+}
+function openWidget(name) {
+  if (widgetWins[name] && !widgetWins[name].isDestroyed()) return;
+  const size = WIDGETS[name], c = cfg.widgets[name];
+  const wa = screen.getPrimaryDisplay().workArea;
+  if (typeof c.x !== 'number') {
+    const i = Object.keys(WIDGETS).indexOf(name);
+    c.x = wa.x + 24; c.y = wa.y + 80 + [0, 290, 140][i];
+    if (name === 'calendar') { c.x = wa.x + 24 + 240; c.y = wa.y + 80; }
+  }
+  const w = new BrowserWindow({
+    x: c.x, y: c.y, width: size.w, height: size.h, show: false,
+    frame: false, transparent: true, resizable: false, hasShadow: false,
+    skipTaskbar: true, focusable: false, fullscreenable: false, maximizable: false, minimizable: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, 'preload-widget.js'), backgroundThrottling: false }
+  });
+  widgetWins[name] = w;
+  w.loadFile(path.join(__dirname, 'renderer', 'widget.html'), { hash: name });
+  w.once('ready-to-show', () => { w.showInactive(); sinkWidget(name); });
+  w.on('moved', () => { const b = w.getBounds(); c.x = b.x; c.y = b.y; saveCfg(); });
+  w.on('closed', () => { delete widgetWins[name]; });
+}
+function closeWidget(name) { const w = widgetWins[name]; if (w && !w.isDestroyed()) w.destroy(); }
+
+// Auslastung für das System-Widget
+let cpuPrev = null;
+function sysStats() {
+  const t = os.cpus().reduce((a, c) => { const s = c.times; a.idle += s.idle; a.all += s.user + s.nice + s.sys + s.irq + s.idle; return a; }, { idle: 0, all: 0 });
+  let cpu = 0;
+  if (cpuPrev && t.all > cpuPrev.all) cpu = 1 - (t.idle - cpuPrev.idle) / (t.all - cpuPrev.all);
+  cpuPrev = t;
+  const total = os.totalmem(), used = total - os.freemem();
+  return { cpu: Math.max(0, Math.min(1, cpu)), ram: used / total, ramUsed: used / 2 ** 30, ramTotal: total / 2 ** 30 };
+}
+setInterval(() => {
+  const w = widgetWins.system;
+  if (w && !w.isDestroyed()) w.webContents.send('stats', sysStats());
+}, 2000);
 
 // ---------- Fenster ----------
 function createWindow() {
@@ -164,9 +219,9 @@ function createWindow() {
 }
 
 ipcMain.handle('ready', () => {
-  setImmediate(() => { applyPos(); pushApps(); });
+  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: !!cfg.glass, frames: !!cfg.frames, notify: notifyState() };
+           glass: !!cfg.glass, frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
@@ -185,6 +240,12 @@ ipcMain.on('desk-icons', () => sendHelper({ c: 'deskicons' }));
 ipcMain.on('wallpaper', async () => {
   const r = await dialog.showOpenDialog({ title: 'Hintergrundbild wählen', properties: ['openFile'], filters: [{ name: 'Bilder', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'webp'] }] });
   if (!r.canceled && r.filePaths[0]) sendHelper({ c: 'wallpaper', path: r.filePaths[0] });
+});
+ipcMain.on('tray-click', (_e, { id, b }) => sendHelper({ c: 'tray', id: String(id), b: b === 'right' ? 'right' : 'left' }));
+ipcMain.on('set-widget', (_e, { name, on }) => {
+  if (!WIDGETS[name]) return;
+  cfg.widgets[name].on = !!on; saveCfg();
+  if (on) openWidget(name); else closeWidget(name);
 });
 ipcMain.on('set-notify', (_e, b) => { cfg.notify.on = !!b; saveCfg(); sendHelper({ c: 'notify', on: cfg.notify.on }); send('ev', notifyState()); });
 ipcMain.on('set-notify-app', (_e, { name, on }) => {
@@ -252,6 +313,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
     loadCfg(); createWindow(); startHelper();
+    for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);
     if (process.env.INSEL_SHOT) require('./dev-shot')(win);   // nur für Entwickler-Bildschirmfotos
   });
   app.on('before-quit', () => {
@@ -260,5 +322,5 @@ else {
     sendHelper({ c: 'frames', on: false });
     if (helper) { try { helper.stdin.end(); } catch (_) {} }
   });
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => { if (!win || win.isDestroyed()) app.quit(); });
 }

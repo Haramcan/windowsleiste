@@ -5,6 +5,7 @@
 //               {"c":"activate","h":123}  {"c":"taskbar","hide":true}  {"c":"start"}
 //               {"c":"theme","light":true}  {"c":"deskicons"}  {"c":"wallpaper","path":"..."}
 //               {"c":"frames","on":true}  {"c":"notify","on":true}
+//               {"c":"tray","id":"...","b":"left|right"}  {"c":"bottom","h":123}
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -34,6 +35,7 @@ internal static class Program
     {
         if (args.Length > 0) uint.TryParse(args[0], out hostPid);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => { Taskbar.Set(false); Frames.Set(false); };
+        if (!args.Contains("--no-tray")) Tray.Start(Emit);
         var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
         Emit(new { t = "hello" });
 
@@ -48,6 +50,7 @@ internal static class Program
         }
         Taskbar.Set(false);   // Insel wurde beendet: alte Taskleiste wieder zeigen
         Frames.Set(false);
+        Tray.Stop();
     }
 
     private static void Handle(string line)
@@ -67,6 +70,10 @@ internal static class Program
             case "wallpaper": Look.SetWallpaper(r.GetProperty("path").GetString() ?? ""); break;
             case "frames": Frames.Set(r.GetProperty("on").GetBoolean()); break;
             case "notify": Notifications.Enabled = r.GetProperty("on").GetBoolean(); break;
+            case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
+            case "bottom":   // Widgets liegen auf dem Desktop, hinter allen Fenstern
+                Native.SetWindowPos(new IntPtr(r.GetProperty("h").GetInt64()), new IntPtr(1) /* HWND_BOTTOM */, 0, 0, 0, 0, 0x13 /* NOSIZE|NOMOVE|NOACTIVATE */);
+                break;
         }
     }
 
@@ -469,10 +476,16 @@ internal static class Taskbar
 
     private static List<IntPtr> Bars()
     {
+        // Nur die echten Leisten von Windows: Der Helfer legt für die Symbole selbst ein Fenster gleichen Namens an.
         var list = new List<IntPtr>();
-        var main = Native.FindWindow("Shell_TrayWnd", null);
-        if (main != IntPtr.Zero) list.Add(main);
+        uint me = (uint)Environment.ProcessId;
         var h = IntPtr.Zero;
+        while ((h = Native.FindWindowEx(IntPtr.Zero, h, "Shell_TrayWnd", null)) != IntPtr.Zero)
+        {
+            Native.GetWindowThreadProcessId(h, out uint pid);
+            if (pid != me) list.Add(h);
+        }
+        h = IntPtr.Zero;
         while ((h = Native.FindWindowEx(IntPtr.Zero, h, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero) list.Add(h);
         return list;
     }
@@ -538,6 +551,7 @@ internal static class Native
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, string l, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(uint action, uint param, string value, uint flags);
     [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);

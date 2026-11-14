@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('insel', {
   deskIcons: () => ipcRenderer.send('desk-icons'),
   wallpaper: () => ipcRenderer.send('wallpaper'),
   setNotify: b => ipcRenderer.send('set-notify', b),
+  trayClick: (id, b) => ipcRenderer.send('tray-click', { id, b }),
+  setWidget: (name, on) => ipcRenderer.send('set-widget', { name, on }),
   setNotifyApp: (name, on) => ipcRenderer.send('set-notify-app', { name, on }),
   dragStart: () => ipcRenderer.send('drag-start'),
   dragMove: () => ipcRenderer.send('drag-move'),

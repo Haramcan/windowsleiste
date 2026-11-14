@@ -137,6 +137,17 @@
     if (b) { e.preventDefault(); api.appMenu(b.dataset.kind, +b.dataset.i); }
   });
 
+  // ---------- Symbole aus dem Infobereich ----------
+  let trayIcons = [];
+  function renderTray(ev) {
+    trayIcons = ev.icons || [];
+    $('#tray').innerHTML = trayIcons.map((t, i) => '<button class="ti" data-ti="' + i + '" title="' + esc(t.title) + '">' +
+      (t.icon ? '<img src="' + esc(t.icon) + '" alt="">' : '<span class="letter">' + esc((t.title || '?').charAt(0).toUpperCase()) + '</span>') + '</button>').join('');
+    island.classList.toggle('has-tray', trayIcons.length > 0);
+  }
+  $('#tray').addEventListener('click', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) api.trayClick(trayIcons[+b.dataset.ti].id, 'left'); });
+  $('#tray').addEventListener('contextmenu', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) { e.preventDefault(); api.trayClick(trayIcons[+b.dataset.ti].id, 'right'); } });
+
   // ---------- Uhr ----------
   function tick() { const d = new Date(); $('#clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
   tick(); setInterval(tick, 5000);
@@ -197,6 +208,8 @@
   $('#bIcons').addEventListener('click', () => api.deskIcons());
   $('#bWall').addEventListener('click', () => { setState('idle'); api.wallpaper(); });
 
+  $$('[data-widget]').forEach(b => b.addEventListener('click', () => { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', on); api.setWidget(b.dataset.widget, on); }));
+
   // ---------- Mitteilungen ----------
   toggle('#tNotify', api.setNotify);
   function showNotifyState(n) {
@@ -236,6 +249,7 @@
     else if (ev.t === 'toast') toast(ev.m);
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
     else if (ev.t === 'notifyState') showNotifyState(ev);
+    else if (ev.t === 'tray') renderTray(ev);
     else if (ev.t === 'notifAccess') { if (!ev.ok) $('#nHint').textContent = 'Windows gibt die Mitteilungen noch nicht frei. Erlaube den Zugriff unter Einstellungen → Datenschutz und Sicherheit → Benachrichtigungen.'; }
     else if (ev.t === 'theme') $('#tLight').setAttribute('aria-pressed', !!ev.light);
     else if (ev.t === 'visible') { if (glassOn) { if (ev.on) startGlass(); else stopGlass(); } }
@@ -247,6 +261,7 @@
     $('#tGlass').setAttribute('aria-pressed', !!s.glass);
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
     showNotifyState(s.notify);
+    (s.widgets || []).forEach(w => { const b = document.querySelector('[data-widget="' + w.name + '"]'); if (b) b.setAttribute('aria-pressed', !!w.on); });
     glassOn = !!s.glass; if (glassOn) setTimeout(startGlass, 300);
   });
   showMedia();
