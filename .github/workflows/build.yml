@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Helfer bauen
+        run: dotnet publish helper/InselHelper.csproj -c Release -o app/helper-bin
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Abhängigkeiten installieren
+        working-directory: app
+        run: npm ci
+
+      - name: Installationsdatei bauen
+        working-directory: app
+        run: npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Insel-Leiste-Setup
+          path: app/dist/Insel-Leiste-Setup.exe
+          if-no-files-found: error

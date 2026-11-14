@@ -1,0 +1,26 @@
+{
+  "name": "insel-leiste",
+  "version": "0.1.0",
+  "description": "Schwebende Insel als Ersatz für die Windows-Taskleiste",
+  "main": "main.js",
+  "author": "Insel-Leiste",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "de.inselleiste.app",
+    "productName": "Insel-Leiste",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "renderer/**"],
+    "extraResources": [{ "from": "helper-bin", "to": "helper" }],
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": true, "perMachine": false, "artifactName": "Insel-Leiste-Setup.exe" }
+  }
+}

@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body style="margin:0">
+<title>Insel-Leiste</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: ein Desktop als Bühne, die Insel aus getöntem Glas, die Insel schwebt darin und lässt sich frei verschieben; darunter eine knappe Anleitung. */
+:root{
+  color-scheme:dark;
+  --page:#0e1116;
+  --ink:#ffffff;
+  --ink-soft:#c5c7cc;
+  --mat:rgba(20,22,30,.44);           /* getöntes Glas */
+  --mat-line:rgba(255,255,255,.14);
+  --fill:rgba(255,255,255,.11);
+  --fill-hover:rgba(255,255,255,.22);
+  --accent:#ffb454;
+  --on-accent:#2a1a04;
+  --ok:#6ccb5f;
+  --font:"Manrope","Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+body{background:var(--page);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+
+/* ---------- Desktop-Bühne ---------- */
+.desk{position:relative;height:560px;border-radius:20px;overflow:hidden;border:1px solid var(--mat-line);
+  background:
+    radial-gradient(70% 60% at 12% 8%,#ff9d5c 0%,transparent 60%),
+    radial-gradient(60% 60% at 88% 12%,#e0508a 0%,transparent 62%),
+    radial-gradient(70% 70% at 50% 45%,#2f7fb0 0%,transparent 70%),
+    radial-gradient(90% 70% at 30% 110%,#6a4fd0 0%,transparent 65%),
+    #16223a}
+.dim{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .2s}
+.win{position:absolute;left:10%;right:10%;top:170px;bottom:-30px;border-radius:14px 14px 0 0;background:rgba(18,20,26,.62);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--mat-line);display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.4)}
+.win-bar{display:flex;align-items:center;justify-content:space-between;padding:0 0 0 14px;height:34px;color:var(--ink-soft);font-size:12px}
+.caps{display:flex}
+.caps svg{width:44px;height:34px}
+.win-body{padding:18px 24px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--mat-line)}
+.win-body b{display:block;height:10px;border-radius:3px;background:rgba(255,255,255,.08)}
+
+/* ---------- Die Insel ---------- */
+.island{--w:232px;--h:44px;--cx:50%;--y:12px;--r:22px;
+  --wr:min(var(--w),calc(100% - 24px));
+  position:absolute;z-index:5;transform:translateX(-50%);
+  left:clamp(calc(var(--wr) / 2 + 12px),var(--cx),calc(100% - var(--wr) / 2 - 12px));
+  width:var(--wr);height:var(--h);border-radius:var(--r);
+  background:var(--mat);backdrop-filter:blur(26px) saturate(1.9) brightness(1.08);-webkit-backdrop-filter:blur(26px) saturate(1.9) brightness(1.08);
+  border:1px solid rgba(255,255,255,.3);color:var(--ink);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+  box-shadow:0 12px 36px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -1px 0 rgba(255,255,255,.12),inset 0 0 24px rgba(255,255,255,.06);
+  transition:width .5s cubic-bezier(.3,1.3,.5,1),height .5s cubic-bezier(.3,1.3,.5,1),left .5s cubic-bezier(.3,1.3,.5,1),border-radius .4s ease}
+.island::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(155deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,0) 32%,rgba(255,255,255,0) 68%,rgba(255,255,255,.08) 100%)}
+.island:not([data-state="idle"]){--r:34px}
+.island[data-anchor="top"]{top:var(--y)}
+.island[data-anchor="bottom"]{bottom:var(--y)}
+.island.dragging{transition:width .5s cubic-bezier(.3,1.3,.5,1),height .5s cubic-bezier(.3,1.3,.5,1),border-radius .4s ease;cursor:grabbing;box-shadow:0 22px 54px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -1px 0 rgba(255,255,255,.12),inset 0 0 24px rgba(255,255,255,.06)}
+.island[data-state="hub"]{--w:480px;--h:134px}
+.island[data-state="music"]{--w:420px;--h:196px}
+.island[data-state="quick"]{--w:400px;--h:204px}
+.island[data-state="timer"]{--w:330px;--h:156px}
+.island[data-state="pin"]{--w:420px;--h:312px}
+.island[data-state="toast"]{--w:360px;--h:64px}
+.view{position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity .12s;display:flex}
+.island[data-state="idle"] .v-idle,.island[data-state="hub"] .v-hub,.island[data-state="music"] .v-music,.island[data-state="quick"] .v-quick,
+.island[data-state="timer"] .v-timer,.island[data-state="pin"] .v-pin,.island[data-state="toast"] .v-toast{
+  opacity:1;pointer-events:auto;transition:opacity .2s .12s}
+.num{font-variant-numeric:tabular-nums}
+
+/* Ruhezustand */
+.v-idle{align-items:center;justify-content:space-between;padding:0 5px}
+.idle-btn{height:34px;border-radius:999px;padding:0 9px;display:flex;align-items:center;gap:9px}
+.idle-btn:hover{background:var(--fill-hover)}
+.clock{font-size:13px;font-weight:600}
+.mini-art{width:20px;height:20px;border-radius:6px;background:var(--art);flex:none}
+.eq{display:flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.eq i{width:3px;border-radius:1.5px;background:var(--accent);height:30%;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.35s}.eq i:nth-child(3){animation-delay:-.7s}.eq i:nth-child(4){animation-delay:-.15s}
+.paused .eq i{animation-play-state:paused}
+@keyframes eq{0%,100%{height:25%}50%{height:100%}}
+
+/* Übersicht: angeheftete Programme wie in der Taskleiste */
+.v-hub{flex-direction:column;justify-content:space-between;padding:14px 16px 16px}
+.apps{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.apps::-webkit-scrollbar{display:none}
+.app{position:relative;width:40px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;padding-bottom:4px}
+.app:hover{background:var(--fill-hover)}
+.app:active svg{transform:scale(.86)}
+.app svg{transition:transform .12s}
+.app::after{content:"";position:absolute;bottom:3px;left:50%;width:0;height:3px;border-radius:2px;background:var(--ink-soft);transform:translateX(-50%);transition:width .2s,background .2s}
+.app.running::after{width:6px}
+.app.active::after{width:16px;background:var(--accent)}
+.app.add{color:var(--ink-soft)}
+.sep{width:1px;background:var(--mat-line);margin:8px 4px;flex:none}
+.chips{display:flex;gap:6px}
+.chip{flex:1;min-width:0;height:40px;border-radius:999px;background:var(--fill);border:1px solid var(--mat-line);display:flex;align-items:center;gap:8px;padding:0 10px;font-size:13px}
+.chip:hover{background:var(--fill-hover)}
+.chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.chip svg{flex:none}
+
+/* gemeinsame Teile der großen Ansichten */
+.big{flex-direction:column;justify-content:space-between;padding:18px}
+.back{position:absolute;top:12px;right:12px;background:var(--fill);width:30px;height:30px;border-radius:999px;display:grid;place-items:center;color:var(--ink-soft)}
+.back:hover{color:var(--ink);background:var(--fill-hover)}
+.label{font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;margin:0}
+.row{display:flex;align-items:center;gap:10px}
+.cap{width:78px;font-size:13px;flex:none}
+
+/* Musik */
+.track{display:flex;align-items:center;gap:14px;padding-right:36px}
+.art{width:64px;height:64px;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.3);background:var(--art);flex:none}
+.meta{min-width:0;flex:1}
+.meta strong,.meta small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta strong{font-size:15px;font-weight:600}
+.meta small{font-size:13px;color:var(--ink-soft)}
+.prog{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-soft)}
+.bar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.16);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:2px}
+.ctl{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;flex:none}
+.ctl:hover{background:var(--fill-hover)}
+.ctl.play{background:var(--ink);color:#14161c}
+.ctl.play:hover{background:#fff}
+.vol{flex:1;min-width:0;margin-left:8px}
+
+/* Regler */
+.toggles{display:flex;gap:6px}
+.tog{flex:1;min-width:0;height:40px;border-radius:999px;background:var(--fill);border:1px solid var(--mat-line);font-size:12.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
+.tog:hover{background:var(--fill-hover)}
+.tog[aria-pressed="true"]{background:var(--accent);border-color:transparent;color:var(--on-accent);font-weight:600}
+.q-val{width:30px;text-align:right;font-size:12.5px;color:var(--ink-soft)}
+
+/* Timer */
+.time{font-size:44px;font-weight:600;line-height:1}
+.pill{height:32px;border-radius:999px;padding:0 14px;background:var(--fill);border:1px solid var(--mat-line);font-size:13px}
+.pill:hover{background:var(--fill-hover)}
+.pill.main{background:var(--accent);border-color:transparent;color:var(--on-accent);font-weight:600}
+
+/* Anheften */
+.v-pin{justify-content:flex-start;gap:10px}
+.pins{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pin{height:36px;border-radius:12px;background:var(--fill);border:1px solid var(--mat-line);display:flex;align-items:center;gap:8px;padding:0 8px;font-size:13px;min-width:0;text-align:left}
+.pin:hover{background:var(--fill-hover)}
+.pin span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pin svg{flex:none}
+.pin .tick{width:16px;height:16px;border-radius:50%;border:1px solid var(--ink-soft);flex:none;display:grid;place-items:center}
+.pin[aria-pressed="true"] .tick{background:var(--accent);border-color:transparent}
+.pin[aria-pressed="false"] .tick svg{visibility:hidden}
+.hint{font-size:12px;color:var(--ink-soft);margin:0}
+
+/* Meldung */
+.v-toast{align-items:center;gap:12px;padding:0 16px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+.v-toast p{margin:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- Anleitung ---------- */
+.intro h1{font-size:26px;font-weight:600;margin:0 0 4px;text-wrap:balance}
+.intro p{margin:0;color:var(--ink-soft);max-width:64ch}
+.try{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px 28px}
+.try h2{font-size:14px;font-weight:600;margin:0 0 2px}
+.try p{margin:0;color:var(--ink-soft)}
+.demo{align-self:flex-start;height:36px;padding:0 16px;border-radius:999px;background:var(--fill);border:1px solid var(--mat-line)}
+.demo:hover{background:var(--fill-hover)}
+@media (max-width:520px){.desk{height:480px}.win{left:4%;right:4%;top:300px}}
+@media (prefers-reduced-motion:reduce){.island,.view,.app svg,.app::after{transition:none!important}.eq i{animation:none;height:70%}}
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <h1>Insel-Leiste</h1>
+    <p>Klickbarer Entwurf in Glasoptik: Die Taskleiste unten fällt weg. Stattdessen schwebt eine kleine Insel auf dem Desktop, die aufgeht, wenn du sie brauchst.</p>
+  </div>
+
+  <div class="desk" id="desk">
+    <div class="win" aria-hidden="true">
+      <div class="win-bar"><span>Dokument – Editor</span>
+        <span class="caps">
+          <svg viewBox="0 0 44 34" fill="none" stroke="currentColor"><path d="M17 17.500h10"/></svg>
+          <svg viewBox="0 0 44 34" fill="none" stroke="currentColor"><rect x="17.500" y="12.500" width="9" height="9" rx="1"/></svg>
+          <svg viewBox="0 0 44 34" fill="none" stroke="currentColor"><path d="M17.500 12.500l9 9M26.500 12.500l-9 9"/></svg>
+        </span>
+      </div>
+      <div class="win-body"><b style="width:38%"></b><b style="width:86%"></b><b style="width:74%"></b><b style="width:80%"></b><b style="width:52%"></b></div>
+    </div>
+    <div class="dim" id="dim"></div>
+
+    <div class="island" id="island" data-state="idle" data-anchor="top">
+      <!-- Ruhezustand -->
+      <div class="view v-idle" data-view="idle">
+        <button class="idle-btn" data-go="hub" aria-label="Übersicht öffnen">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="var(--accent)"><rect x="1" y="1" width="6.500" height="6.500" rx=".8"/><rect x="8.500" y="1" width="6.500" height="6.500" rx=".8"/><rect x="1" y="8.500" width="6.500" height="6.500" rx=".8"/><rect x="8.500" y="8.500" width="6.500" height="6.500" rx=".8"/></svg>
+          <span class="clock num" data-clock>--:--</span>
+        </button>
+        <button class="idle-btn" data-go="music" aria-label="Musik öffnen">
+          <span class="mini-art"></span>
+          <span class="eq"><i></i><i></i><i></i><i></i></span>
+        </button>
+      </div>
+
+      <!-- Übersicht -->
+      <div class="view v-hub" data-view="hub">
+        <div class="apps" id="apps"></div>
+        <div class="chips">
+          <button class="chip" data-go="music"><span class="mini-art"></span><span data-title>Musik</span></button>
+          <button class="chip" data-go="quick">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.400" stroke-linecap="round"><path d="M2 5h8M13 5h1M2 11h1M6 11h8"/><circle cx="11.500" cy="5" r="1.600"/><circle cx="4.500" cy="11" r="1.600"/></svg>
+            <span>Regler</span></button>
+          <button class="chip" data-go="timer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.400" stroke-linecap="round"><circle cx="8" cy="9" r="5.200"/><path d="M8 6.500V9l1.800 1.200M6.500 1.500h3"/></svg>
+            <span class="num" data-timer-chip>12:00</span></button>
+        </div>
+      </div>
+
+      <!-- Musik -->
+      <div class="view big v-music" data-view="music">
+        <button class="back" data-go="hub" aria-label="Zurück zur Übersicht"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.500" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+        <div class="track">
+          <div class="art"></div>
+          <div class="meta"><strong data-title>–</strong><small data-artist>–</small></div>
+          <span class="eq"><i></i><i></i><i></i><i></i></span>
+        </div>
+        <div class="prog num"><span id="pos">0:00</span><div class="bar"><i id="fill"></i></div><span id="dur">0:00</span></div>
+        <div class="row">
+          <button class="ctl" id="prev" aria-label="Vorheriges Lied"><svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M3 3h1.600v12H3zM16 3.600v10.800a.6.6 0 01-.95.5L7 9.500a.6.6 0 010-1l8.050-5.400a.6.6 0 01.95.5z"/></svg></button>
+          <button class="ctl play" id="play" aria-label="Pause"><svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path id="playIcon" d="M4.500 3h3v12h-3zM10.500 3h3v12h-3z"/></svg></button>
+          <button class="ctl" id="next" aria-label="Nächstes Lied"><svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M13.400 3H15v12h-1.600zM2 3.600v10.800a.6.6 0 00.95.5L11 9.500a.6.6 0 000-1L2.950 3.100A.6.6 0 002 3.600z"/></svg></button>
+          <div class="row vol">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 6h2.500L8 3v10L4.500 10H2z"/><path d="M10.500 5.500a3.500 3.500 0 010 5" fill="none" stroke="currentColor" stroke-width="1.400" stroke-linecap="round"/></svg>
+            <input type="range" id="volMusic" min="0" max="100" value="60" aria-label="Lautstärke">
+          </div>
+        </div>
+      </div>
+
+      <!-- Regler -->
+      <div class="view big v-quick" data-view="quick">
+        <button class="back" data-go="hub" aria-label="Zurück zur Übersicht"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.500" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+        <div class="label">Regler</div>
+        <div class="row"><span class="cap">Lautstärke</span><input type="range" id="volQuick" min="0" max="100" value="60" aria-label="Lautstärke"><span class="q-val num" id="volVal">60</span></div>
+        <div class="row"><span class="cap">Helligkeit</span><input type="range" id="bright" min="20" max="100" value="100" aria-label="Helligkeit"><span class="q-val num" id="brightVal">100</span></div>
+        <div class="toggles">
+          <button class="tog" aria-pressed="true">WLAN</button>
+          <button class="tog" aria-pressed="false">Bluetooth</button>
+          <button class="tog" aria-pressed="false">Nicht stören</button>
+        </div>
+      </div>
+
+      <!-- Timer -->
+      <div class="view big v-timer" data-view="timer">
+        <button class="back" data-go="hub" aria-label="Zurück zur Übersicht"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.500" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+        <div class="label">Timer</div>
+        <div class="time num" id="time">12:00</div>
+        <div class="row">
+          <button class="pill main" id="tToggle">Start</button>
+          <button class="pill" id="tPlus">+1 Min</button>
+          <button class="pill" id="tReset">Zurücksetzen</button>
+        </div>
+      </div>
+
+      <!-- Anheften -->
+      <div class="view big v-pin" data-view="pin">
+        <button class="back" data-go="hub" aria-label="Zurück zur Übersicht"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.500" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+        <div class="label">An die Insel anheften</div>
+        <div class="pins" id="pins"></div>
+        <p class="hint">Beispielprogramme. Im echten Programm ziehst du eine Verknüpfung oder ein Spiel einfach auf die Insel.</p>
+      </div>
+
+      <!-- Meldung -->
+      <div class="view v-toast" data-view="toast" role="status"><span class="dot"></span><p id="toastText"></p></div>
+    </div>
+  </div>
+
+  <div class="try">
+    <div><h2>Maus drüber</h2><p>Die Insel geht auf: angeheftete Programme mit Strich darunter, wenn sie laufen, dazu Musik, Regler und Timer.</p></div>
+    <div><h2>Verschieben</h2><p>Zieh die Insel mit gedrückter Maustaste an eine beliebige Stelle. In der unteren Hälfte klappt sie nach oben auf.</p></div>
+    <div><h2>Anheften</h2><p>Über das Plus kommen Programme und Spiele dazu oder wieder weg, zum Beispiel ein Spiel aus Steam.</p></div>
+    <div><h2>Musik</h2><p>Titel, Fortschritt, vor, zurück, Pause und Lautstärke direkt in der Insel.</p></div>
+  </div>
+  <button class="demo" id="demoToast">Meldung auslösen</button>
+</div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+  const island=$('#island'), desk=$('#desk');
+  let state='idle', leaveT=null, toastT=null, drag=null, dragEnd=0;
+
+  function setState(s){
+    state=s; island.dataset.state=s;
+    $$('.view').forEach(v=>{ v.inert = v.dataset.view!==s; });
+  }
+  setState('idle');
+
+  // Öffnen / Schließen
+  island.addEventListener('pointerenter',e=>{ clearTimeout(leaveT); if(e.pointerType==='mouse' && state==='idle' && !drag) setState('hub'); });
+  island.addEventListener('pointerleave',e=>{
+    if(e.pointerType!=='mouse' || e.buttons) return;
+    clearTimeout(leaveT); leaveT=setTimeout(()=>{ if(state!=='toast') setState('idle'); },450);
+  });
+  document.addEventListener('pointerdown',e=>{ if(!island.contains(e.target) && !e.target.closest('#demoToast') && state!=='toast') setState('idle'); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') setState('idle'); });
+  island.addEventListener('click',e=>{ if(Date.now()-dragEnd<250){ e.stopPropagation(); e.preventDefault(); } },true);
+  island.addEventListener('click',e=>{ const g=e.target.closest('[data-go]'); if(g) setState(g.dataset.go); });
+
+  function toast(text,ms){
+    $('#toastText').textContent=text; setState('toast');
+    clearTimeout(toastT); toastT=setTimeout(()=>setState(island.matches(':hover')?'hub':'idle'),ms||2600);
+  }
+
+  // Verschieben
+  island.addEventListener('pointerdown',e=>{
+    if(e.button!==0 || e.target.closest('input')) return;
+    drag={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false};
+  });
+  window.addEventListener('pointermove',e=>{
+    if(!drag || e.pointerId!==drag.id) return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y, d=desk.getBoundingClientRect(), r=island.getBoundingClientRect();
+    if(!drag.moved){
+      if(Math.hypot(dx,dy)<6) return;
+      drag.moved=true; drag.cx0=r.left+r.width/2-d.left; drag.top0=r.top-d.top;
+      island.classList.add('dragging'); island.dataset.anchor='top';
+      try{ island.setPointerCapture(e.pointerId); }catch(_){}
+    }
+    let cx=drag.cx0+dx; if(Math.abs(cx-d.width/2)<14) cx=d.width/2;
+    const top=Math.max(8,Math.min(d.height-r.height-8,drag.top0+dy));
+    island.style.setProperty('--cx',cx+'px'); island.style.setProperty('--y',top+'px');
+  });
+  function endDrag(e){
+    if(drag && e.pointerId===drag.id){
+      if(drag.moved){
+        const d=desk.getBoundingClientRect(), r=island.getBoundingClientRect(), top=r.top-d.top;
+        if(top+r.height/2>d.height/2){ island.dataset.anchor='bottom'; island.style.setProperty('--y',Math.max(8,d.height-top-r.height)+'px'); }
+        island.classList.remove('dragging'); dragEnd=Date.now();
+      }
+      drag=null;
+    }
+    if(e.pointerType==='mouse' && state!=='idle' && state!=='toast' && !island.matches(':hover')){
+      clearTimeout(leaveT); leaveT=setTimeout(()=>setState('idle'),450);
+    }
+  }
+  window.addEventListener('pointerup',endDrag); window.addEventListener('pointercancel',endDrag);
+
+  // Programme (Beispieldaten)
+  const S=c=>'fill="'+c+'" fill-opacity=".22" stroke="'+c+'" stroke-width="1.600" stroke-linecap="round" stroke-linejoin="round"';
+  const L=c=>'fill="none" stroke="'+c+'" stroke-width="1.600" stroke-linecap="round" stroke-linejoin="round"';
+  const apps=[
+    {id:'files',n:'Dateien',pin:1,run:1,g:'<path '+S('#ffc83d')+' d="M3 7a2 2 0 012-2h3.500l2 2H17a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>'},
+    {id:'web',n:'Browser',pin:1,run:2,g:'<circle '+S('#4cc2ff')+' cx="11" cy="11" r="8"/><path '+L('#4cc2ff')+' d="M3 11h16M11 3c2.600 2.400 2.600 13.600 0 16M11 3c-2.600 2.400-2.600 13.600 0 16"/>'},
+    {id:'mail',n:'Mail',pin:1,run:0,g:'<rect '+S('#7aa7ff')+' x="3" y="5" width="16" height="12" rx="2"/><path '+L('#7aa7ff')+' d="M3.500 7l7.500 5 7.500-5"/>'},
+    {id:'steam',n:'Steam',pin:1,run:0,g:'<rect '+S('#9db4d6')+' x="3" y="3" width="16" height="16" rx="4"/><path fill="#9db4d6" d="M9 7.500v7l6-3.500z"/>'},
+    {id:'game',n:'Sternenhafen (Steam)',pin:1,run:0,g:'<path '+S('#6ccb5f')+' d="M6.500 7h9a4 4 0 014 4.600l-.5 3a2.200 2.200 0 01-3.900 1L13.500 14h-5l-1.600 1.600a2.200 2.200 0 01-3.900-1l-.5-3A4 4 0 016.500 7z"/><path '+L('#6ccb5f')+' d="M7.500 9.500v3M6 11h3M14.500 11h.01"/>'},
+    {id:'notes',n:'Notizen',pin:0,run:0,g:'<path '+S('#b4a0ff')+' d="M5 3h9l3 3v13H5z"/><path '+L('#b4a0ff')+' d="M8 9h6M8 13h6"/>'},
+    {id:'calc',n:'Rechner',pin:0,run:0,g:'<rect '+S('#a8b0bd')+' x="5" y="3" width="12" height="16" rx="2"/><path '+L('#a8b0bd')+' d="M8 7h6M8 11h.01M11 11h.01M14 11h.01M8 15h.01M11 15h.01M14 15h.01"/>'},
+    {id:'term',n:'Terminal',pin:0,run:0,g:'<rect '+S('#e6e6e6')+' x="3" y="4" width="16" height="14" rx="2"/><path '+L('#e6e6e6')+' d="M6.500 9l2.500 2-2.500 2M11.500 13.500h4"/>'},
+    {id:'photos',n:'Fotos',pin:0,run:0,g:'<rect '+S('#ff9a76')+' x="3" y="4" width="16" height="14" rx="2"/><path '+L('#ff9a76')+' d="M3.500 15l4.500-4.500 3.500 3.500 2.500-2 4.500 4"/>'},
+    {id:'set',n:'Einstellungen',pin:0,run:0,g:'<circle '+S('#c8ccd2')+' cx="11" cy="11" r="3"/><path '+L('#c8ccd2')+' d="M11 2.500v3M11 16.500v3M2.500 11h3M16.500 11h3M5 5l2.100 2.100M14.900 14.900L17 17M17 5l-2.100 2.100M7.100 14.900L5 17"/>'}
+  ];
+  const icon=(a,s)=>'<svg width="'+s+'" height="'+s+'" viewBox="0 0 22 22">'+a.g+'</svg>';
+  function renderApps(){
+    $('#apps').innerHTML=
+      '<button class="app" data-start aria-label="Start" title="Start"><svg width="22" height="22" viewBox="0 0 22 22" fill="var(--accent)"><rect x="3" y="3" width="7.500" height="7.500" rx="1"/><rect x="11.500" y="3" width="7.500" height="7.500" rx="1"/><rect x="3" y="11.500" width="7.500" height="7.500" rx="1"/><rect x="11.500" y="11.500" width="7.500" height="7.500" rx="1"/></svg></button><span class="sep"></span>'+
+      apps.filter(a=>a.pin).map(a=>'<button class="app'+(a.run===2?' running active':a.run?' running':'')+'" data-app="'+a.id+'" aria-label="'+a.n+'" title="'+a.n+'">'+icon(a,24)+'</button>').join('')+
+      '<button class="app add" data-go="pin" aria-label="Programm anheften" title="Programm anheften"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.400" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>';
+  }
+  function renderPins(){
+    $('#pins').innerHTML=apps.map(a=>'<button class="pin" data-pin="'+a.id+'" aria-pressed="'+!!a.pin+'">'+icon(a,18)+'<span>'+a.n+'</span><i class="tick"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="var(--on-accent)" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.200l2 2 4-4.400"/></svg></i></button>').join('');
+  }
+  renderApps(); renderPins();
+  $('#apps').addEventListener('click',e=>{
+    if(e.target.closest('[data-start]')) return toast('Hier ginge das Startmenü auf',1800);
+    const b=e.target.closest('[data-app]'); if(!b) return;
+    const a=apps.find(x=>x.id===b.dataset.app);
+    apps.forEach(x=>{ if(x.run===2) x.run=1; }); const was=a.run; a.run=2; renderApps();
+    toast(was?a.n+' kommt in den Vordergrund':a.n+' wird gestartet',1600);
+  });
+  $('#pins').addEventListener('click',e=>{
+    const b=e.target.closest('[data-pin]'); if(!b) return;
+    const a=apps.find(x=>x.id===b.dataset.pin);
+    if(!a.pin && apps.filter(x=>x.pin).length>=8){ $('.hint').textContent='Im Entwurf passen höchstens 8 Programme auf die Insel.'; return; }
+    a.pin=a.pin?0:1; renderApps(); renderPins();
+  });
+
+  // Uhr
+  function tick(){ const d=new Date(); $$('[data-clock]').forEach(e=>e.textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')); }
+  tick(); setInterval(tick,5000);
+
+  // Musik (Beispieldaten)
+  const tracks=[
+    {t:'Nachtfahrt',a:'Lumen Kollektiv',d:214,art:'linear-gradient(135deg,#ffb454,#c2456b)'},
+    {t:'Kupferhimmel',a:'Mira Solen',d:187,art:'linear-gradient(135deg,#5fd6a0,#1d4e6b)'},
+    {t:'Stiller Hafen',a:'Otto & die Gezeiten',d:243,art:'linear-gradient(135deg,#8aa8ff,#5b3fa8)'}
+  ];
+  let ti=0,pos=47,playing=true;
+  const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+  function showTrack(){
+    const k=tracks[ti];
+    island.style.setProperty('--art',k.art);
+    $$('[data-title]').forEach(e=>e.textContent=k.t);
+    $$('[data-artist]').forEach(e=>e.textContent=k.a);
+    $('#dur').textContent=fmt(k.d); showPos();
+  }
+  function showPos(){ $('#pos').textContent=fmt(pos); $('#fill').style.width=(pos/tracks[ti].d*100)+'%'; }
+  function showPlay(){
+    island.classList.toggle('paused',!playing);
+    $('#playIcon').setAttribute('d',playing?'M4.500 3h3v12h-3zM10.500 3h3v12h-3z':'M5 3.200v11.600a.6.6 0 00.92.5l9-5.800a.6.6 0 000-1l-9-5.800a.6.6 0 00-.92.5z');
+    $('#play').setAttribute('aria-label',playing?'Pause':'Abspielen');
+  }
+  function skip(n){ ti=(ti+n+tracks.length)%tracks.length; pos=0; showTrack(); }
+  $('#play').addEventListener('click',()=>{playing=!playing;showPlay();});
+  $('#next').addEventListener('click',()=>skip(1));
+  $('#prev').addEventListener('click',()=>{ if(pos>3){pos=0;showPos();} else skip(-1); });
+  showTrack(); showPlay();
+
+  // Lautstärke & Helligkeit
+  function setVol(v){ $('#volMusic').value=v; $('#volQuick').value=v; $('#volVal').textContent=v; }
+  $('#volMusic').addEventListener('input',e=>setVol(e.target.value));
+  $('#volQuick').addEventListener('input',e=>setVol(e.target.value));
+  $('#bright').addEventListener('input',e=>{ $('#brightVal').textContent=e.target.value; $('#dim').style.opacity=(100-e.target.value)/100*0.8; });
+  $$('.tog').forEach(b=>b.addEventListener('click',()=>b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true')));
+
+  // Timer
+  let left=720,running=false;
+  function showTimer(){ const s=fmt(left).padStart(5,'0'); $('#time').textContent=s; $$('[data-timer-chip]').forEach(e=>e.textContent=s); $('#tToggle').textContent=running?'Pause':'Start'; }
+  $('#tToggle').addEventListener('click',()=>{ if(left>0){running=!running;showTimer();} });
+  $('#tPlus').addEventListener('click',()=>{left+=60;showTimer();});
+  $('#tReset').addEventListener('click',()=>{left=720;running=false;showTimer();});
+  showTimer();
+
+  setInterval(()=>{
+    if(playing){ pos++; if(pos>=tracks[ti].d) skip(1); else showPos(); }
+    if(running){ left--; if(left<=0){left=0;running=false;toast('Timer abgelaufen',3200);} showTimer(); }
+  },1000);
+
+  $('#demoToast').addEventListener('click',()=>toast('Neue Nachricht von Jana: „Bin in 10 Minuten da“'));
+})();
+</script>
+</body>
+</html>

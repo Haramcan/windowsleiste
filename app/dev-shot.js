@@ -1,0 +1,19 @@
+// Entwickler-Hilfe: INSEL_SHOT=ordner npm start  →  speichert Bilder jedes Zustands mit Beispieldaten.
+const fs = require('fs'), path = require('path');
+module.exports = win => {
+  const out = process.env.INSEL_SHOT;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  win.webContents.once('did-finish-load', async () => {
+    await wait(500);
+    const dot = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" rx="10" fill="#4cc2ff"/></svg>');
+    win.webContents.send('apps', { pins: [{ name: 'Dateien', icon: dot, wins: [1], active: false }, { name: 'Spiel', icon: '', wins: [], active: false }], others: [{ name: 'Browser', icon: dot, wins: [2], active: true }] });
+    win.webContents.send('ev', { t: 'media', has: true, title: 'Nachtfahrt', artist: 'Lumen Kollektiv', playing: true, pos: 47, dur: 214 });
+    win.webContents.send('ev', { t: 'volume', level: 0.6, muted: false });
+    for (const s of ['idle', 'hub', 'music', 'quick', 'timer']) {
+      await win.webContents.executeJavaScript(`document.querySelector('#island').dataset.state='${s}'`);
+      await wait(900);
+      fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
+    }
+    require('electron').app.quit();
+  });
+};
