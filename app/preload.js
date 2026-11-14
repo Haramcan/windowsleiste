@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('insel', {
   ready: () => ipcRenderer.invoke('ready'),
   on: (channel, cb) => { if (['ev', 'apps', 'layout', 'winpos'].includes(channel)) ipcRenderer.on(channel, (_e, data) => cb(data)); },
   ignore: b => ipcRenderer.send('ignore', b),
+  rect: r => ipcRenderer.send('rect', r),
   helper: cmd => ipcRenderer.send('helper', cmd),
   appClick: (kind, i) => ipcRenderer.send('app-click', { kind, i }),
   appMenu: (kind, i) => ipcRenderer.send('app-menu', { kind, i }),

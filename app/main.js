@@ -1,6 +1,6 @@
 // Insel-Leiste: Hauptprozess. Ein durchsichtiges, immer sichtbares Fenster zeigt die Insel;
 // ein kleiner Helfer (helper/InselHelper.exe) liefert Musik, Lautstärke und offene Fenster.
-const { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell, dialog, Menu, nativeImage, desktopCapturer, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -346,6 +346,17 @@ ipcMain.on('set-notify-app', (_e, { name, on }) => {
   saveCfg(); send('ev', notifyState());
 });
 ipcMain.on('ignore', (_e, b) => { if (!drag) win.setIgnoreMouseEvents(!!b, { forward: true }); });
+
+// Sicherheitsnetz: Liegt der Mauszeiger über der Insel, nimmt das Fenster Klicks an, egal was vorher war.
+// (Nach einem Vollbild-Spiel kam das Signal der Oberfläche sonst manchmal nicht mehr an.)
+let islandRect = null;
+ipcMain.on('rect', (_e, r) => { islandRect = r; });
+setInterval(() => {
+  if (!win || win.isDestroyed() || !win.isVisible() || drag || !islandRect) return;
+  const c = screen.getCursorScreenPoint(), b = win.getBounds();
+  const x = c.x - b.x, y = c.y - b.y, r = islandRect;
+  if (x >= r.left && x <= r.left + r.width && y >= r.top && y <= r.top + r.height) win.setIgnoreMouseEvents(false);
+}, 120);
 ipcMain.on('helper', (_e, cmd) => {
   if (cmd && ['media', 'volume', 'mute', 'start'].includes(cmd.c)) sendHelper(cmd);
 });
@@ -438,6 +449,8 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
     loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates();
+    // Notausgang: Strg+Alt+Q beendet die Insel immer und holt die alte Taskleiste zurück.
+    try { globalShortcut.register('Control+Alt+Q', () => { cleanup(); setTimeout(() => app.exit(0), 900); }); } catch (_) {}
     for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);
     if (process.env.INSEL_SHOT) require('./dev-shot')(win);   // nur für Entwickler-Bildschirmfotos
   });

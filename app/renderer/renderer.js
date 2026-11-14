@@ -11,12 +11,23 @@
     if (s === 'start' && was !== 'start') openStart();
     if (was === 'start' && s !== 'start') api.focus(false);
     $$('.view').forEach(v => { v.inert = v.dataset.view !== s; });
+    reportRect();
   }
+  // Dem Hauptprozess laufend sagen, wo die Insel im Fenster liegt (auch während sie wächst oder schrumpft).
+  function sendRect() { const r = island.getBoundingClientRect(); api.rect({ left: r.left, top: r.top, width: r.width, height: r.height }); }
+  function reportRect() { sendRect(); [120, 300, 650].forEach(ms => setTimeout(sendRect, ms)); }
+  setInterval(sendRect, 2000);
   setState('idle');
 
   // ---------- Öffnen / Schließen ----------
   // Außerhalb der Insel ist das Fenster für die Maus durchlässig.
   island.addEventListener('mouseenter', () => {
+    hover = true; api.ignore(false); clearTimeout(leaveT);
+    if ((state === 'idle' || state === 'vol') && !drag) { clearTimeout(volT); setState('hub'); }
+  });
+  // Falls das Betreten einmal nicht gemeldet wurde (z. B. nach einem Vollbild-Spiel): jede Bewegung zählt auch.
+  island.addEventListener('mousemove', () => {
+    if (hover) return;
     hover = true; api.ignore(false); clearTimeout(leaveT);
     if ((state === 'idle' || state === 'vol') && !drag) { clearTimeout(volT); setState('hub'); }
   });
@@ -70,7 +81,7 @@
     island.style.setProperty('--ir', l.insetR + 'px');
     geo = Object.assign(geo || {}, l);
     if (!geo.win || !geo.display) return;
-    placeGlass(); setTimeout(placeGlass, 600);
+    placeGlass(); setTimeout(placeGlass, 600); reportRect();
     if (glassOn && geo.display.id !== glassDisplay) startGlass();
   });
   api.on('winpos', p => { if (geo) { geo.win.x = p.x; geo.win.y = p.y; placeGlass(); } });
@@ -343,7 +354,8 @@
     else if (ev.t === 'tray') renderTray(ev);
     else if (ev.t === 'notifAccess') { if (!ev.ok) $('#nHint').textContent = 'Windows gibt die Mitteilungen noch nicht frei. Erlaube den Zugriff unter Einstellungen → Datenschutz und Sicherheit → Benachrichtigungen.'; }
     else if (ev.t === 'theme') $('#tLight').setAttribute('aria-pressed', !!ev.light);
-    else if (ev.t === 'visible') { if (glassOn) { if (ev.on) startGlass(); else stopGlass(); } }
+    else if (ev.t === 'visible') { hover = false; drag = null; island.classList.toggle('dragging', false); if (ev.on && state !== 'idle') setState('idle');
+       if (glassOn) { if (ev.on) startGlass(); else stopGlass(); } }
   });
 
   api.ready().then(s => {
