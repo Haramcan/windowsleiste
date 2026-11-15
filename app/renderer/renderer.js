@@ -6,12 +6,14 @@
   let state = 'idle', leaveT = null, toastT = null, drag = null, dragEnd = 0, hover = false;
 
   const sticky = s => s === 'start' || s === 'notes';
+  let goBack = false;   // beim Schließen per Taste zurück ins vorherige Fenster (z. B. das Spiel)
+  function closeBack() { goBack = true; setState('idle'); }
   function setState(s) {
     const was = state;
     state = s; island.dataset.state = s;
     if (s === 'start' && was !== 'start') openStart();
     if (s === 'notes' && was !== 'notes') { api.focus(true); setTimeout(() => $('#note').focus(), 60); }
-    if (sticky(was) && !sticky(s)) api.focus(false);
+    if (sticky(was) && !sticky(s)) { api.focus(false, goBack); goBack = false; }
     if (s === 'mixer' && was !== 'mixer') api.mixer(true);
     if (was === 'mixer' && s !== 'mixer') api.mixer(false);
     $$('.view').forEach(v => { v.inert = v.dataset.view !== s; });
@@ -277,7 +279,7 @@
 
   // ---------- Notizen ----------
   $('#note').addEventListener('input', () => api.noteSave($('#note').value));
-  $('#note').addEventListener('keydown', e => { if (e.key === 'Escape') setState('idle'); });
+  $('#note').addEventListener('keydown', e => { if (e.key === 'Escape') closeBack(); });
   $('#tGlass').addEventListener('click', () => setGlassMode(glassMode ? false : 'bild'));
   $('#tLive').addEventListener('click', () => setGlassMode(glassMode === 'live' ? 'bild' : 'live'));
   toggle('#tFrames', api.setFrames);
@@ -326,7 +328,7 @@
   sSearch.addEventListener('input', drawStart);
   sSearch.addEventListener('keydown', e => {
     if (e.key === 'Enter') launch(sel);
-    else if (e.key === 'Escape') setState('idle');
+    else if (e.key === 'Escape') closeBack();
   });
   sGrid.addEventListener('click', e => { const b = e.target.closest('[data-si]'); if (b) launch(+b.dataset.si); });
   // Ausschalten und Neustart brauchen einen zweiten Klick zur Bestätigung.
@@ -385,7 +387,7 @@
     else if (ev.t === 'toast') toast(ev.m);
     else if (ev.t === 'update') showUpdate(ev);
     else if (ev.t === 'blur') { if (sticky(state)) setState('idle'); }
-    else if (ev.t === 'winkey') setState(state === 'start' ? 'idle' : 'start');
+    else if (ev.t === 'winkey') { if (state === 'start') closeBack(); else setState('start'); }
     else if (ev.t === 'mic') { island.classList.toggle('has-mic', !!ev.has); island.classList.toggle('mic-off', !!ev.has && !!ev.muted); $('#bMic').hidden = !ev.has; $('#bMic').title = ev.muted ? 'Mikrofon ist stumm – einschalten' : 'Mikrofon stumm schalten'; }
     else if (ev.t === 'mixer') renderMixer(ev.list || []);
     else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
@@ -394,7 +396,7 @@
     else if (ev.t === 'tray') renderTray(ev);
     else if (ev.t === 'notifAccess') { if (!ev.ok) $('#nHint').textContent = 'Windows gibt die Mitteilungen noch nicht frei. Erlaube den Zugriff unter Einstellungen → Datenschutz und Sicherheit → Benachrichtigungen.'; }
     else if (ev.t === 'theme') $('#tLight').setAttribute('aria-pressed', !!ev.light);
-    else if (ev.t === 'visible') { hover = false; drag = null; island.classList.toggle('dragging', false); if (ev.on && state !== 'idle') setState('idle');
+    else if (ev.t === 'visible') { hover = false; drag = null; island.classList.toggle('dragging', false); if (!ev.on && state !== 'idle') setState('idle');
        if (glassOn) { if (ev.on) startGlass(); else stopGlass(); } }
   });
 

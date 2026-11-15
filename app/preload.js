@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('insel', {
   startIcons: ids => ipcRenderer.invoke('start-icons', ids),
   startLaunch: id => ipcRenderer.send('start-launch', id),
   power: kind => ipcRenderer.send('power', kind),
-  focus: b => ipcRenderer.send('focus', b),
+  focus: (b, restore) => ipcRenderer.send('focus', b, !!restore),
   updateCheck: () => ipcRenderer.send('update-check'),
   updateInstall: () => ipcRenderer.send('update-install'),
   trayClick: (id, b) => ipcRenderer.send('tray-click', { id, b }),

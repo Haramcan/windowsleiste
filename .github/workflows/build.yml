@@ -62,6 +62,7 @@ jobs:
           grep '^klick' shots/helper.log || true
           grep -q '^klick: normal: vorher=idle hover=hub klick=quick' shots/helper.log
           grep -q '^klick: nach Vollbild: vorher=idle hover=hub klick=quick' shots/helper.log
+          grep -q '^klick: Windows-Taste im Vollbild: offen=start bleibt=start zweiter Druck=idle' shots/helper.log
           grep -q '^glas: Standard: 0 von' shots/helper.log
           ls shots/idle.png shots/hub.png shots/music.png
           grep -q "helper: windows" shots/helper.log

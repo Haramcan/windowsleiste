@@ -79,6 +79,7 @@ internal static class Program
                 break;
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
             case "winkey": WinKey.Enabled = r.GetProperty("on").GetBoolean(); break;
+            case "back": WindowList.Back(); break;
             case "fg":   // der Insel die Tastatur geben (für die Suche im Menü)
                 {
                     var h = new IntPtr(r.GetProperty("h").GetInt64());
@@ -490,6 +491,17 @@ internal static class WindowList
         // Vollbild (auch Videos im Browser) ist genau so groß wie der Bildschirm; maximierte Fenster ragen darüber hinaus.
         var m = mi.rcMonitor;
         return Math.Abs(r.Left - m.Left) <= 1 && Math.Abs(r.Top - m.Top) <= 1 && Math.Abs(r.Right - m.Right) <= 1 && Math.Abs(r.Bottom - m.Bottom) <= 1;
+    }
+
+    // Das Fenster, das vor der Insel aktiv war, wieder nach vorn holen (Menü per Windows-Taste oder Esc geschlossen).
+    public static void Back()
+    {
+        var h = lastActive;
+        if (h == IntPtr.Zero || !Native.IsWindow(h)) return;
+        if (Native.IsIconic(h)) Native.ShowWindow(h, 9 /* SW_RESTORE */);
+        Native.keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        Native.SetForegroundWindow(h);
+        Native.keybd_event(0x12, 0, 2, UIntPtr.Zero);
     }
 
     // Wie in der Taskleiste: Klick holt das Fenster nach vorn, Klick auf das aktive Fenster minimiert es.

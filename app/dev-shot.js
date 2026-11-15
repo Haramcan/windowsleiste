@@ -46,6 +46,16 @@ module.exports = win => {
       await round('normal');
       global.inselSetHidden(true); await wait(2500); global.inselSetHidden(false); await wait(1500);
       await round('nach Vollbild');
+      // Windows-Taste im Vollbild: Das Menü muss aufgehen und offen bleiben, auch wenn die Insel danach als sichtbar gemeldet wird.
+      try {
+        global.inselSetHidden(true); await wait(1500);
+        global.inselWinKey(); await wait(1200);
+        const s1 = await state();
+        global.inselSetHidden(false); await wait(1500);
+        const s2 = await state();
+        global.inselWinKey(); await wait(900);
+        log('Windows-Taste im Vollbild: offen=' + s1 + ' bleibt=' + s2 + ' zweiter Druck=' + await state());
+      } catch (e) { log('Windows-Taste: Fehler ' + e.message); }
       await js(`document.querySelector('#island').dataset.state='idle'`);
     }
     for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'mixer', 'notes', 'timer', 'vol', 'start']) {

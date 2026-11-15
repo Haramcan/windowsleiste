@@ -139,11 +139,7 @@ function startHelper() {
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
-    else if (ev.t === 'winkey') {
-      // Auch im Vollbild: Insel hervorholen und ihr Menü öffnen
-      if (hiddenForFullscreen && !peeking) { peeking = true; awaySince = 0; applyPos(); send('ev', { t: 'visible', on: true }); }
-      send('ev', ev);
-    }
+    else if (ev.t === 'winkey') onWinKey();
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
     else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
     else if (ev.t === 'fullscreen') { if (!process.env.INSEL_SHOT) setHidden(!!ev.on); }   // im Probelauf steuert der Test das selbst
@@ -160,6 +156,13 @@ function startHelper() {
   sendHelper({ c: 'winkey', on: !!cfg.winKey });
 }
 const notifyState = () => ({ t: 'notifyState', on: !!cfg.notify.on, apps: cfg.notifyApps.map(n => ({ name: n, on: !cfg.notify.off.includes(n) })) });
+
+// Windows-Taste: Menü der Insel öffnen oder schließen. Auch im Vollbild: Insel vorher hervorholen.
+function onWinKey() {
+  if (hiddenForFullscreen && !peeking) { peeking = true; awaySince = 0; applyPos(); send('ev', { t: 'visible', on: true }); }
+  send('ev', { t: 'winkey' });
+}
+if (process.env.INSEL_SHOT) global.inselWinKey = onWinKey;
 
 // Bei Vollbild verstecken und danach wieder zeigen.
 function setHidden(on) {
@@ -367,13 +370,16 @@ ipcMain.on('power', (_e, kind) => {
   else if (kind === 'off') { cleanup(); run('shutdown.exe', ['/s', '/t', '0']); }
 });
 // Für die Suche braucht die Insel kurz die Tastatur; sonst nimmt sie anderen Fenstern nie den Fokus weg.
-ipcMain.on('focus', (_e, b) => {
+ipcMain.on('focus', (_e, b, restore) => {
   if (!win || win.isDestroyed()) return;
   if (b) {
     win.setFocusable(true); win.setIgnoreMouseEvents(false); win.focus();
     try { sendHelper({ c: 'fg', h: Number(win.getNativeWindowHandle().readBigUInt64LE(0)) }); } catch (_) {}
   }
-  else { win.blur(); win.setFocusable(false); }
+  else {
+    win.blur(); win.setFocusable(false);
+    if (restore) sendHelper({ c: 'back' });   // zurück ins Spiel bzw. ins vorherige Fenster
+  }
 });
 ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });
 ipcMain.on('set-theme', (_e, light) => sendHelper({ c: 'theme', light: !!light }));
