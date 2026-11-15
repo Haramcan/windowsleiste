@@ -38,7 +38,7 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Rechtsklick** auf ein Symbol: anheften oder wieder lösen.
 - **Regler:** Lautstärke, Taskleiste, Autostart, Aussehen, Widgets, Mitteilungen, Insel beenden.
 
-**Notausgang:** `Strg+Alt+Q` beendet die Insel jederzeit und holt die alte Taskleiste zurück.
+**Notausgang:** `Strg+Umschalt+F12` beendet die Insel jederzeit und holt die alte Taskleiste zurück.
 
 Falls die alte Taskleiste nach einem Absturz verschwunden bleibt: `Strg+Umschalt+Esc` → „Windows-Explorer“ → **Neu starten**.
 

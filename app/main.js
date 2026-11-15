@@ -500,8 +500,8 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
     loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates();
-    // Notausgang: Strg+Alt+Q beendet die Insel immer und holt die alte Taskleiste zurück.
-    try { globalShortcut.register('Control+Alt+Q', () => { cleanup(); setTimeout(() => app.exit(0), 900); }); } catch (_) {}
+    // Notausgang: Strg+Umschalt+F12 beendet die Insel immer und holt die alte Taskleiste zurück.
+    try { globalShortcut.register('Control+Shift+F12', () => { cleanup(); setTimeout(() => app.exit(0), 900); }); } catch (_) {}
     for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);
     if (process.env.INSEL_SHOT) require('./dev-shot')(win);   // nur für Entwickler-Bildschirmfotos
   });
