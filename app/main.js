@@ -137,16 +137,14 @@ function startHelper() {
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
-    else if (ev.t === 'winkey') { if (!hiddenForFullscreen || peeking) send('ev', ev); }
+    else if (ev.t === 'winkey') {
+      // Auch im Vollbild: Insel hervorholen und ihr Menü öffnen
+      if (hiddenForFullscreen && !peeking) { peeking = true; awaySince = 0; win.showInactive(); protect(); send('ev', { t: 'visible', on: true }); }
+      send('ev', ev);
+    }
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
     else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
-    else if (ev.t === 'fullscreen') {
-      if (process.env.INSEL_SHOT) return;   // im Probelauf immer sichtbar bleiben
-      hiddenForFullscreen = !!ev.on;
-      peeking = false; edgeSince = 0;
-      if (win && !win.isDestroyed()) { if (ev.on) win.hide(); else { win.showInactive(); protect(); } }
-      send('ev', { t: 'visible', on: !ev.on });
-    }
+    else if (ev.t === 'fullscreen') { if (!process.env.INSEL_SHOT) setHidden(!!ev.on); }   // im Probelauf steuert der Test das selbst
     else if (ev.t === 'notif') {
       const name = ev.app || 'Unbekannt';
       if (!cfg.notifyApps.includes(name)) { cfg.notifyApps.push(name); saveCfg(); send('ev', notifyState()); }
@@ -160,6 +158,15 @@ function startHelper() {
   sendHelper({ c: 'winkey', on: !!cfg.winKey });
 }
 const notifyState = () => ({ t: 'notifyState', on: !!cfg.notify.on, apps: cfg.notifyApps.map(n => ({ name: n, on: !cfg.notify.off.includes(n) })) });
+
+// Bei Vollbild verstecken und danach wieder zeigen.
+function setHidden(on) {
+  hiddenForFullscreen = on;
+  peeking = false; edgeSince = 0; drag = null;
+  if (win && !win.isDestroyed()) { if (on) win.hide(); else { win.showInactive(); protect(); } }
+  send('ev', { t: 'visible', on: !on });
+}
+if (process.env.INSEL_SHOT) global.inselSetHidden = setHidden;
 
 // Vollbild (Spiel, Video): Die Insel ist weg, kommt aber zurück, wenn die Maus kurz am Bildschirmrand bei ihr anstößt.
 let peeking = false, edgeSince = 0, awaySince = 0;
@@ -483,6 +490,8 @@ ipcMain.on('update-install', () => {
 
 // Animationen sollen nie gedrosselt werden, auch wenn die Insel nie den Fokus hat.
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 
 if (!app.requestSingleInstanceLock()) app.quit();

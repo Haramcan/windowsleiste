@@ -1,7 +1,7 @@
 // Entwickler-Hilfe: INSEL_SHOT=ordner npm start  →  speichert Bilder jedes Zustands mit Beispieldaten.
 const fs = require('fs'), path = require('path');
 module.exports = win => {
-  setTimeout(() => require('electron').app.exit(0), 70000);   // nie hängen bleiben
+  setTimeout(() => require('electron').app.exit(0), 170000);   // nie hängen bleiben
   const out = process.env.INSEL_SHOT;
   const wait = ms => new Promise(r => setTimeout(r, ms));
   win.webContents.once('did-finish-load', async () => {
@@ -13,6 +13,41 @@ module.exports = win => {
     if (!process.env.INSEL_REAL) { win.webContents.send('ev', { t: 'mic', has: true, muted: true }); win.webContents.send('ev', { t: 'mixer', list: [{ pid: 1, name: 'Spotify', level: 0.4, muted: false }, { pid: 2, name: 'chrome', level: 1, muted: false }, { pid: 0, name: 'Systemtöne', level: 0.7, muted: false }] }); }
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'tray', ok: true, icons: [{ id: 'a', title: 'Discord', icon: dot }, { id: 'b', title: 'Steam', icon: '' }, { id: 'c', title: 'Virenschutz', icon: dot }] });
     if (!process.env.INSEL_REAL) win.webContents.send('ev', { t: 'notifyState', on: true, apps: [{ name: 'Discord', on: true }, { name: 'Mail', on: false }, { name: 'Steam', on: true }] });
+    // Klick-Test mit echter Maus: Geht die Insel auf, und kommt ein Klick an? Einmal normal, einmal nach Verstecken und Wiederzeigen.
+    if (process.env.INSEL_REAL) {
+      const { spawn } = require('child_process');
+      const log = t => fs.appendFileSync(path.join(out, 'helper.log'), 'klick: ' + t + '\n');
+      const js = code => win.webContents.executeJavaScript(code);
+      const mouse = (x, y, click) => new Promise(done => {
+        const file = path.join(out, 'maus.ps1');
+        fs.writeFileSync(file, [
+          'Add-Type -Name U -Namespace W -MemberDefinition \'[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, System.UIntPtr e);\'',
+          '[W.U]::SetCursorPos(' + Math.round(x - 3) + ',' + Math.round(y) + ') | Out-Null', 'Start-Sleep -Milliseconds 150',
+          '[W.U]::SetCursorPos(' + Math.round(x) + ',' + Math.round(y) + ') | Out-Null', 'Start-Sleep -Milliseconds 900',
+          click ? '[W.U]::mouse_event(2,0,0,0,[System.UIntPtr]::Zero); Start-Sleep -Milliseconds 70; [W.U]::mouse_event(4,0,0,0,[System.UIntPtr]::Zero)' : '',
+          'Start-Sleep -Milliseconds 700'].join('\r\n'));
+        const p = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', file], { windowsHide: true });
+        p.on('close', done); p.on('error', done);
+      });
+      const center = async sel => { const r = await js(`(() => { const r = document.querySelector('${sel}').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`); const b = win.getBounds(); return [b.x + r[0], b.y + r[1]]; };
+      const state = () => js(`document.querySelector('#island').dataset.state`);
+      const round = async label => {
+        try {
+          await mouse(40, 600, false);
+          const before = await state();
+          let p = await center('#island'); await mouse(p[0], p[1], false);
+          const hover = await state();
+          p = await center('.chip[data-go="quick"]'); await mouse(p[0], p[1], true);
+          const click = await state();
+          await mouse(40, 600, false); await wait(900);
+          log(label + ': vorher=' + before + ' hover=' + hover + ' klick=' + click + ' danach=' + await state());
+        } catch (e) { log(label + ': Fehler ' + e.message); }
+      };
+      await round('normal');
+      global.inselSetHidden(true); await wait(2500); global.inselSetHidden(false); await wait(1500);
+      await round('nach Vollbild');
+      await js(`document.querySelector('#island').dataset.state='idle'`);
+    }
     for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'mixer', 'notes', 'timer', 'vol', 'start']) {
       await win.webContents.executeJavaScript(s === 'start' ? `document.querySelector('[data-start]').click()` : `document.querySelector('#island').dataset.state='${s}'`);
       await wait(s === 'start' ? 6000 : 900);

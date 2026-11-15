@@ -34,7 +34,8 @@ img{-webkit-user-drag:none}
   box-shadow:0 8px 20px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.45),inset 0 -1px 0 rgba(255,255,255,.12),inset 0 0 24px rgba(255,255,255,.06);
   transition:width .5s cubic-bezier(.3,1.3,.5,1),height .5s cubic-bezier(.3,1.3,.5,1),left .5s cubic-bezier(.3,1.3,.5,1),border-radius .4s ease}
 /* Milchglas: unscharfes Live-Bild des Bildschirms, darüber Tönung und Lichtkante */
-.glass{position:absolute;inset:-48px;overflow:hidden;filter:blur(20px) saturate(1.8);pointer-events:none}
+.glass{position:absolute;left:50%;top:-48px;width:920px;height:600px;margin-left:-460px;overflow:hidden;filter:blur(20px) saturate(1.8);pointer-events:none;will-change:transform}
+.island[data-anchor="bottom"] .glass{top:auto;bottom:-48px}
 .glass .anchor{position:absolute;left:50%;top:48px;width:0;height:0}
 .island[data-anchor="bottom"] .glass .anchor{top:auto;bottom:48px}
 .glass video,.glass img{position:absolute;left:var(--vx,0);top:var(--vy,0);width:var(--vw,0);height:var(--vh,0);max-width:none;object-fit:fill}
@@ -69,7 +70,8 @@ img{-webkit-user-drag:none}
 .island[data-state="mixer"]{--w:420px;--h:300px}
 .island[data-state="notes"]{--w:420px;--h:300px}
 .island[data-state="vol"]{--w:300px;--h:52px;--r:26px}
-.view{position:absolute;inset:0;opacity:0;pointer-events:none;transform:scale(.96);transition:opacity .12s,transform .2s;display:flex;will-change:opacity,transform}
+.view{position:absolute;left:50%;top:0;width:var(--w);height:var(--h);margin-left:calc(var(--w) / -2);box-sizing:border-box;opacity:0;pointer-events:none;transform:scale(.96);transition:opacity .12s,transform .2s;display:flex;will-change:opacity,transform;contain:layout style}
+.island[data-anchor="bottom"] .view{top:auto;bottom:0}
 .island[data-state="mixer"] .v-mixer,.island[data-state="notes"] .v-notes,.island[data-state="start"] .v-start,.island[data-state="look"] .v-look,.island[data-state="widgets"] .v-widgets,.island[data-state="notif"] .v-notif,
 .island[data-state="idle"] .v-idle,.island[data-state="hub"] .v-hub,.island[data-state="music"] .v-music,.island[data-state="quick"] .v-quick,
 .island[data-state="timer"] .v-timer,.island[data-state="toast"] .v-toast,.island[data-state="vol"] .v-vol{opacity:1;pointer-events:auto;transform:none;
