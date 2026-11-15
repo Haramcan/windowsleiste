@@ -79,7 +79,7 @@
     if (moved && pin) {
       // Zielplatz: so viele andere angeheftete Symbole, wie links vom losgelassenen liegen
       const mid = pin.getBoundingClientRect().left + pin.offsetWidth / 2;
-      const others = $$('#apps [data-kind="pin"]').filter(b => b !== pin);
+      const others = [...pin.parentElement.querySelectorAll('[data-kind="pin"]')].filter(b => b !== pin);
       const to = others.filter(b => b.getBoundingClientRect().left + b.offsetWidth / 2 < mid).length;
       pin.style.transform = ''; pin.classList.remove('moving'); dragEnd = Date.now();
       api.pinMove(+pin.dataset.i, to);
@@ -169,7 +169,7 @@
       d.pins.map((a, i) => appBtn(a, 'pin', i)).join('') + add +
       (d.others.length ? sep + d.others.map((a, i) => appBtn(a, 'other', i)).join('') : '');
     if (html === appsHtml) return;   // nichts geändert: nicht neu zeichnen, sonst gehen Klicks verloren
-    appsHtml = html; $('#apps').innerHTML = html;
+    appsHtml = html; $('#apps').innerHTML = html; $('#sApps').innerHTML = html;
     // Die Übersicht wächst mit der Zahl der Symbole (bis zur Fensterbreite).
     const n = 2 + d.pins.length + d.others.length, seps = d.others.length ? 2 : 1;
     const w = n * 44 + seps * 13 + 32;
@@ -177,30 +177,35 @@
   }
   renderApps({ pins: [], others: [] });
   api.on('apps', renderApps);
-  $('#apps').addEventListener('click', e => {
-    if (e.target.closest('[data-start]')) return setState('start');
-    if (e.target.closest('[data-add]')) { setState('idle'); return api.pinAdd(); }
-    const b = e.target.closest('[data-kind]');
-    if (b) api.appClick(b.dataset.kind, +b.dataset.i);
-  });
-  $('#apps').addEventListener('contextmenu', e => {
-    const b = e.target.closest('[data-kind]');
-    if (b) { e.preventDefault(); api.appMenu(b.dataset.kind, +b.dataset.i); }
+  // Dieselbe Programmreihe gibt es zweimal: in der aufgeklappten Insel und unten im Menü.
+  ['#apps', '#sApps'].forEach(sel => {
+    $(sel).addEventListener('click', e => {
+      if (e.target.closest('[data-start]')) return setState(state === 'start' ? 'hub' : 'start');
+      if (e.target.closest('[data-add]')) { setState('idle'); return api.pinAdd(); }
+      const b = e.target.closest('[data-kind]');
+      if (b) { api.appClick(b.dataset.kind, +b.dataset.i); if (state === 'start') setState('idle'); }
+    });
+    $(sel).addEventListener('contextmenu', e => {
+      const b = e.target.closest('[data-kind]');
+      if (b) { e.preventDefault(); api.appMenu(b.dataset.kind, +b.dataset.i); }
+    });
   });
 
   // ---------- Symbole aus dem Infobereich ----------
   let trayIcons = [], trayHtml = '';
   // Mausrad blättert seitlich durch lange Symbolreihen
-  ['#apps', '#tray'].forEach(sel => $(sel).addEventListener('wheel', e => { $(sel).scrollLeft += e.deltaY; }, { passive: true }));
+  ['#apps', '#tray', '#sApps', '#sTray'].forEach(sel => $(sel).addEventListener('wheel', e => { $(sel).scrollLeft += e.deltaY; }, { passive: true }));
   function renderTray(ev) {
     trayIcons = ev.icons || [];
     const html = trayIcons.map((t, i) => '<button class="ti" data-ti="' + i + '" title="' + esc(t.title) + '">' +
       (t.icon ? '<img src="' + esc(t.icon) + '" alt="">' : '<span class="letter">' + esc((t.title || '?').charAt(0).toUpperCase()) + '</span>') + '</button>').join('');
-    if (html !== trayHtml) { trayHtml = html; $('#tray').innerHTML = html; }
+    if (html !== trayHtml) { trayHtml = html; $('#tray').innerHTML = html; $('#sTray').innerHTML = html; }
     island.classList.toggle('has-tray', trayIcons.length > 0);
   }
   $('#tray').addEventListener('click', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) api.trayClick(trayIcons[+b.dataset.ti].id, 'left'); });
   $('#tray').addEventListener('contextmenu', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) { e.preventDefault(); api.trayClick(trayIcons[+b.dataset.ti].id, 'right'); } });
+  $('#sTray').addEventListener('click', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) api.trayClick(trayIcons[+b.dataset.ti].id, 'left'); });
+  $('#sTray').addEventListener('contextmenu', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) { e.preventDefault(); api.trayClick(trayIcons[+b.dataset.ti].id, 'right'); } });
 
   // ---------- Uhr ----------
   function tick() { const d = new Date(); $('#clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }

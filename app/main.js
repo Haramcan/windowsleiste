@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 const readline = require('readline');
 const os = require('os');
 
-const WIN_W = 820, WIN_H = 500;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
+const WIN_W = 820, WIN_H = 560;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
 const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 

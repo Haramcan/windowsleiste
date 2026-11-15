@@ -56,7 +56,7 @@ img{-webkit-user-drag:none}
 .island[data-anchor="bottom"]{bottom:var(--m)}
 .island.dragging{cursor:grabbing}
 .island[data-state="hub"]{--w:var(--hubw,480px);--h:134px}
-.island[data-state="start"]{--w:560px;--h:436px}
+.island[data-state="start"]{--w:600px;--h:500px}
 .island.has-mic[data-state="idle"]{--w:262px}
 .island.has-tray[data-state="hub"]{--h:170px}
 .island.has-media[data-state="hub"]{--w:min(calc(var(--hubw,480px) + 300px),780px);--h:178px}
@@ -98,6 +98,11 @@ img{-webkit-user-drag:none}
 .s-app span.n{font-size:11.5px;line-height:1.2;text-align:center;max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .s-empty{grid-column:1/-1;color:var(--ink-soft);font-size:13px;padding:24px 8px;text-align:center}
 .s-power{display:flex;gap:6px;flex:none}
+.s-power .tog{height:34px}
+/* Die gewohnte Leiste mit Programmen und Symbolen, unten im Menü */
+.s-bar{display:flex;align-items:center;gap:8px;flex:none;border-top:1px solid var(--mat-line);padding-top:10px;min-width:0}
+.s-bar .apps{flex:1;min-width:0}
+.s-bar .tray{flex:0 1 auto;max-width:210px}
 @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.9)}to{opacity:1;transform:none}}
 .mini-art{width:20px;height:20px;border-radius:6px;flex:none}
 .has-media .v-idle .mini-art{width:26px;height:26px;border-radius:8px}
@@ -280,6 +285,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <button class="tog" data-power="restart">Neu starten</button>
       <button class="tog" data-power="off">Herunterfahren</button>
     </div>
+    <div class="s-bar"><div class="apps" id="sApps"></div><div class="tray" id="sTray"></div></div>
   </div>
 
   <!-- Musik -->
