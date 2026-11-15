@@ -40,7 +40,9 @@ function defaultPos() {
   const wa = screen.getPrimaryDisplay().workArea;
   return { cx: Math.round(wa.x + wa.width / 2), y: wa.y + 12, anchor: 'top' };
 }
+const offscreen = () => win.setBounds({ x: -30000, y: -30000, width: WIN_W, height: WIN_H });
 function applyPos() {
+  if (hiddenForFullscreen && !peeking) return offscreen();
   if (!cfg.pos) cfg.pos = defaultPos();
   const p = cfg.pos;
   const disp = screen.getDisplayNearestPoint({ x: p.cx, y: p.y }), d = disp.bounds;
@@ -139,7 +141,7 @@ function startHelper() {
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
     else if (ev.t === 'winkey') {
       // Auch im Vollbild: Insel hervorholen und ihr Menü öffnen
-      if (hiddenForFullscreen && !peeking) { peeking = true; awaySince = 0; win.showInactive(); protect(); send('ev', { t: 'visible', on: true }); }
+      if (hiddenForFullscreen && !peeking) { peeking = true; awaySince = 0; applyPos(); send('ev', { t: 'visible', on: true }); }
       send('ev', ev);
     }
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
@@ -163,7 +165,7 @@ const notifyState = () => ({ t: 'notifyState', on: !!cfg.notify.on, apps: cfg.no
 function setHidden(on) {
   hiddenForFullscreen = on;
   peeking = false; edgeSince = 0; drag = null;
-  if (win && !win.isDestroyed()) { if (on) win.hide(); else { win.showInactive(); protect(); } }
+  if (win && !win.isDestroyed()) applyPos();   // schiebt die Insel aus dem Bild oder zurück an ihren Platz
   send('ev', { t: 'visible', on: !on });
 }
 if (process.env.INSEL_SHOT) global.inselSetHidden = setHidden;
@@ -179,14 +181,14 @@ setInterval(() => {
     const near = Math.abs(c.x - cfg.pos.cx) < 220 && c.x >= d.x && c.x < d.x + d.width;
     if (atEdge && near) {
       if (!edgeSince) edgeSince = now;
-      else if (now - edgeSince > 300) { peeking = true; awaySince = 0; win.showInactive(); protect(); send('ev', { t: 'visible', on: true }); }
+      else if (now - edgeSince > 300) { peeking = true; awaySince = 0; applyPos(); send('ev', { t: 'visible', on: true }); }
     } else edgeSince = 0;
   } else {
     const b = win.getBounds(), r = islandRect;
     const inside = r && c.x >= b.x + r.left - 40 && c.x <= b.x + r.left + r.width + 40 && c.y >= b.y + r.top - 40 && c.y <= b.y + r.top + r.height + 40;
     if (inside || win.isFocused()) awaySince = 0;
     else if (!awaySince) awaySince = now;
-    else if (now - awaySince > 1200) { peeking = false; edgeSince = 0; win.hide(); send('ev', { t: 'visible', on: false }); }
+    else if (now - awaySince > 1200) { peeking = false; edgeSince = 0; applyPos(); send('ev', { t: 'visible', on: false }); }
   }
 }, 100);
 
@@ -257,7 +259,7 @@ function createWindow() {
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => { applyPos(); if (!hiddenForFullscreen) win.showInactive(); protect(); });
+  win.once('ready-to-show', () => { applyPos(); win.showInactive(); protect(); });
   win.on('blur', () => send('ev', { t: 'blur' }));
   screen.on('display-metrics-changed', applyPos);
   screen.on('display-removed', applyPos);
