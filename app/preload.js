@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('insel', {
   setNotify: b => ipcRenderer.send('set-notify', b),
   setLocked: b => ipcRenderer.send('set-locked', b),
   setWinKey: b => ipcRenderer.send('set-winkey', b),
+  setHideFullscreen: b => ipcRenderer.send('set-hide-fullscreen', b),
   micToggle: () => ipcRenderer.send('mic-toggle'),
   snip: () => ipcRenderer.send('snip'),
   mixer: on => ipcRenderer.send('mixer', on),

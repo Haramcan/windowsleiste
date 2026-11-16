@@ -80,6 +80,9 @@ internal static class Program
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
             case "winkey": WinKey.Enabled = r.GetProperty("on").GetBoolean(); break;
             case "back": WindowList.Back(); break;
+            case "close":   // Fenster eines Programms schließen (wie das X im Fenster)
+                foreach (var e in r.GetProperty("h").EnumerateArray()) Native.PostMessage(new IntPtr(e.GetInt64()), 0x10 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
+                break;
             case "fg":   // der Insel die Tastatur geben (für die Suche im Menü)
                 {
                     var h = new IntPtr(r.GetProperty("h").GetInt64());
@@ -103,6 +106,7 @@ internal static class Program
     {
         string lastWindows = "", lastVolume = "", lastTheme = "", lastMic = "", lastMixer = "";
         bool lastFull = false;
+        int fullCount = 0;
         int n = 0;
         while (true)
         {
@@ -111,7 +115,9 @@ internal static class Program
                 var list = WindowList.List(hostPid, out bool full);
                 var w = JsonSerializer.Serialize(list);
                 if (w != lastWindows) { lastWindows = w; Emit(new { t = "windows", list }); }
-                if (full != lastFull) { lastFull = full; Emit(new { t = "fullscreen", on = full }); }
+                fullCount = full ? fullCount + 1 : 0;
+                bool fullNow = fullCount >= 2;
+                if (fullNow != lastFull) { lastFull = fullNow; Emit(new { t = "fullscreen", on = fullNow, why = WindowList.FullscreenWhy }); }
 
                 if (Volume.Get(out float level, out bool muted))
                 {
@@ -461,7 +467,18 @@ internal static class WindowList
         if (found.Any(f => f.h == fg)) lastActive = fg;
         else if (!found.Any(f => f.h == lastActive)) lastActive = IntPtr.Zero;
 
-        fullscreen = found.Any(f => f.h == fg) && CoversMonitor(fg);
+        fullscreen = false; FullscreenWhy = "";
+        if (found.Any(f => f.h == fg))
+        {
+            bool covers = CoversMonitor(fg);
+            int state = -1;
+            if (Native.SHQueryUserNotificationState(out int q) == 0) state = q;
+            // 2 = Vollbild-Anwendung, 3 = Spiel im exklusiven Vollbild, 4 = Präsentation
+            if (state == 3) fullscreen = true;
+            else if (state == 2 || state == 4) fullscreen = covers;
+            else if (state < 0) fullscreen = covers && !Native.IsZoomed(fg);   // Abfrage fehlgeschlagen: alte Regel
+            if (covers || fullscreen) FullscreenWhy = "Zustand " + state + ", deckt Bildschirm: " + covers + ", Fenster: " + found.First(f => f.h == fg).exe;
+        }
         return found.Select(f => new WindowInfo(f.h.ToInt64(), f.title, f.exe, f.h == lastActive && !Native.IsIconic(f.h))).ToList();
     }
 
@@ -479,6 +496,8 @@ internal static class WindowList
     }
 
     // Vollbild (Spiele, Videos): das Fenster deckt seinen ganzen Bildschirm ab.
+    public static string FullscreenWhy = "";
+
     private static bool CoversMonitor(IntPtr h)
     {
         var cls = new StringBuilder(64);
@@ -600,6 +619,7 @@ internal static class Native
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, string l, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(uint action, uint param, string value, uint flags);

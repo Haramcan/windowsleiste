@@ -42,9 +42,10 @@
     if (drag || e.buttons) return;
     api.ignore(true); scheduleClose();
   });
+  let menuOpen = false;   // Rechtsklick-Menü offen: Insel bleibt aufgeklappt
   function scheduleClose() {
     clearTimeout(leaveT);
-    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !sticky(state) && !hover) setState('idle'); }, 450);
+    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !sticky(state) && !hover && !menuOpen) setState('idle'); }, 450);
   }
   island.addEventListener('click', e => { if (Date.now() - dragEnd < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   island.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) setState(g.dataset.go); });
@@ -288,6 +289,7 @@
   $('#tGlass').addEventListener('click', () => setGlassMode(glassMode ? false : 'bild'));
   $('#tLive').addEventListener('click', () => setGlassMode(glassMode === 'live' ? 'bild' : 'live'));
   toggle('#tFrames', api.setFrames);
+  toggle('#tHideFs', api.setHideFullscreen);
   toggle('#tLock', on => { locked = on; api.setLocked(on); });
   toggle('#tClear', on => { island.classList.toggle('clear', on); api.setClear(on); });
 
@@ -390,6 +392,7 @@
       lastVol = key;
     }
     else if (ev.t === 'toast') toast(ev.m);
+    else if (ev.t === 'menu') { menuOpen = !!ev.on; if (!menuOpen && !island.matches(':hover')) { hover = false; api.ignore(true); scheduleClose(); } }
     else if (ev.t === 'update') showUpdate(ev);
     else if (ev.t === 'blur') { if (sticky(state)) setState('idle'); }
     else if (ev.t === 'winkey') { if (state === 'start') closeBack(); else setState('start'); }
@@ -409,6 +412,7 @@
     $('#tTaskbar').setAttribute('aria-pressed', !!s.hideTaskbar);
     $('#tAuto').setAttribute('aria-pressed', !!s.autostart);
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
+    $('#tHideFs').setAttribute('aria-pressed', s.hideFullscreen !== false);
     locked = !!s.locked; $('#tLock').setAttribute('aria-pressed', locked);
     $('#tWinKey').setAttribute('aria-pressed', !!s.winKey); $('#note').value = s.note || '';
     island.classList.toggle('clear', !!s.clear); $('#tClear').setAttribute('aria-pressed', !!s.clear);

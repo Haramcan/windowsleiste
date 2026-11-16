@@ -12,7 +12,7 @@ const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, locked: false, clear: false, winKey: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
 let lastTray = { t: 'tray', ok: false, icons: [] }, lastMic = { t: 'mic', has: false, muted: false };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
@@ -31,6 +31,15 @@ function loadCfg() {
 }
 function saveCfg() {
   try { fs.mkdirSync(path.dirname(cfgFile()), { recursive: true }); fs.writeFileSync(cfgFile(), JSON.stringify(cfg, null, 2)); } catch (_) {}
+}
+// Kleines Protokoll für die Fehlersuche (wann und warum sich die Insel versteckt hat)
+let fullscreenNow = false;
+function logLine(text) {
+  try {
+    const file = path.join(app.getPath('userData'), 'insel.log');
+    try { if (fs.statSync(file).size > 200000) fs.renameSync(file, file + '.alt'); } catch (_) {}
+    fs.appendFileSync(file, new Date().toISOString() + ' ' + text + '\n');
+  } catch (_) {}
 }
 const send = (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); };
 
@@ -142,7 +151,11 @@ function startHelper() {
     else if (ev.t === 'winkey') onWinKey();
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
     else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
-    else if (ev.t === 'fullscreen') { if (!process.env.INSEL_SHOT) setHidden(!!ev.on); }   // im Probelauf steuert der Test das selbst
+    else if (ev.t === 'fullscreen') {
+      logLine('Vollbild ' + (ev.on ? 'an' : 'aus') + (ev.why ? ' (' + ev.why + ')' : ''));
+      fullscreenNow = !!ev.on;
+      if (!process.env.INSEL_SHOT) setHidden(fullscreenNow && cfg.hideFullscreen !== false);   // im Probelauf steuert der Test das selbst
+    }
     else if (ev.t === 'notif') {
       const name = ev.app || 'Unbekannt';
       if (!cfg.notifyApps.includes(name)) { cfg.notifyApps.push(name); saveCfg(); send('ev', notifyState()); }
@@ -271,7 +284,7 @@ function createWindow() {
 ipcMain.handle('ready', () => {
   setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', lastMic); send('ev', updateState); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
+           glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, hideFullscreen: cfg.hideFullscreen !== false, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
@@ -303,6 +316,7 @@ function wallpaperUrl() {
   return wallCache.url;
 }
 setInterval(() => { const before = wallCache.url, now = wallpaperUrl(); if (now !== before) send('ev', { t: 'wall', data: now }); }, 4000);
+ipcMain.on('set-hide-fullscreen', (_e, b) => { cfg.hideFullscreen = !!b; saveCfg(); setHidden(fullscreenNow && cfg.hideFullscreen); });
 ipcMain.on('set-winkey', (_e, b) => { cfg.winKey = !!b; saveCfg(); sendHelper({ c: 'winkey', on: cfg.winKey }); });
 ipcMain.on('mic-toggle', () => sendHelper({ c: 'micmute' }));
 ipcMain.on('snip', () => setTimeout(() => sendHelper({ c: 'snip' }), 350));
@@ -425,7 +439,12 @@ ipcMain.on('app-menu', (_e, { kind, i }) => {
   const items = [];
   if (kind === 'pin' && cfg.pins[i]) items.push({ label: 'Von der Insel lösen', click: () => { cfg.pins.splice(i, 1); saveCfg(); pushApps(); } });
   if (kind === 'other' && lastApps.others[i]) { const exe = lastApps.others[i].exe; items.push({ label: 'An die Insel anheften', click: () => addPins([exe]) }); }
-  if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  const a = (kind === 'pin' ? lastApps.pins : lastApps.others)[i];
+  if (a && a.wins.length) items.push({ label: a.wins.length > 1 ? 'Alle ' + a.wins.length + ' Fenster schließen' : 'Fenster schließen', click: () => sendHelper({ c: 'close', h: a.wins }) });
+  if (!items.length) return;
+  // Solange das Menü offen ist, bleibt die Insel aufgeklappt.
+  send('ev', { t: 'menu', on: true });
+  Menu.buildFromTemplate(items).popup({ window: win, callback: () => send('ev', { t: 'menu', on: false }) });
 });
 ipcMain.on('pin-add', async () => {
   const r = await dialog.showOpenDialog({
