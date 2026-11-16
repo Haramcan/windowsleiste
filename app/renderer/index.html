@@ -55,17 +55,18 @@ img{-webkit-user-drag:none}
 .island[data-anchor="top"]{top:var(--m)}
 .island[data-anchor="bottom"]{bottom:var(--m)}
 .island.dragging{cursor:grabbing}
-.island[data-state="hub"]{--w:var(--hubw,480px);--h:134px}
+.island[data-state="hub"]{--w:var(--hubw,560px);--h:134px}
 .island[data-state="start"]{--w:600px;--h:500px}
 .island[data-state="idle"]{--w:316px}
 .island.has-mic[data-state="idle"]{--w:346px}
 .island.has-tray[data-state="hub"]{--h:170px}
-.island.has-media[data-state="hub"]{--w:min(calc(var(--hubw,480px) + 300px),780px);--h:178px}
+.island.has-media[data-state="hub"]{--w:min(calc(var(--hubw,560px) + 300px),860px);--h:178px}
 .island[data-state="music"]{--w:420px;--h:196px}
 .island[data-state="quick"]{--w:400px;--h:206px}
-.island[data-state="settings"]{--w:420px;--h:346px}
+.island[data-state="settings"]{--w:420px;--h:442px}
+.island[data-state="cal"]{--w:330px;--h:338px}
 .island[data-state="look"]{--w:400px;--h:298px}
-.island[data-state="widgets"]{--w:400px;--h:160px}
+.island[data-state="widgets"]{--w:400px;--h:206px}
 .island[data-state="notif"]{--w:400px;--h:264px}
 .island[data-state="toast"]{--w:360px;--h:64px}
 .island[data-state="mixer"]{--w:420px;--h:300px}
@@ -75,7 +76,7 @@ img{-webkit-user-drag:none}
 .island[data-anchor="bottom"] .view{top:auto;bottom:0}
 .island[data-state="mixer"] .v-mixer,.island[data-state="notes"] .v-notes,.island[data-state="start"] .v-start,.island[data-state="look"] .v-look,.island[data-state="widgets"] .v-widgets,.island[data-state="notif"] .v-notif,
 .island[data-state="idle"] .v-idle,.island[data-state="hub"] .v-hub,.island[data-state="music"] .v-music,.island[data-state="quick"] .v-quick,
-.island[data-state="settings"] .v-settings,.island[data-state="toast"] .v-toast,.island[data-state="vol"] .v-vol{opacity:1;pointer-events:auto;transform:none;
+.island[data-state="cal"] .v-cal,.island[data-state="settings"] .v-settings,.island[data-state="toast"] .v-toast,.island[data-state="vol"] .v-vol{opacity:1;pointer-events:auto;transform:none;
   transition:opacity .22s .1s,transform .45s cubic-bezier(.3,1.3,.5,1) .06s}
 .num{font-variant-numeric:tabular-nums}
 
@@ -147,6 +148,25 @@ img{-webkit-user-drag:none}
 .sep{width:1px;background:var(--mat-line);margin:8px 4px;flex:none}
 .chips{display:flex;gap:6px}
 .chip.icon{flex:0 0 40px;padding:0;justify-content:center}
+.chip.day{flex:0 0 auto}
+/* Kalender */
+.v-cal{justify-content:flex-start;gap:10px}
+.cal-head{display:flex;align-items:center;gap:6px;padding-right:36px}
+.cal-head strong{flex:1;font-size:14px;font-weight:600}
+.cal-head button{width:30px;height:30px;border-radius:999px;background:var(--fill);display:grid;place-items:center}
+.cal-head button:hover{background:var(--fill-hover)}
+.calg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:12.5px;text-align:center}
+.calg span{height:34px;display:grid;place-items:center;border-radius:50%}
+.calg .hd{color:var(--ink-soft);font-weight:600;height:24px}
+.calg .out{color:var(--ink-soft);opacity:.45}
+.calg .today{background:var(--accent);color:var(--on-accent);font-weight:700}
+/* Vorschau eines Fensters beim Überfahren */
+.peek{position:absolute;z-index:6;width:300px;box-sizing:border-box;padding:10px;border-radius:20px;background:rgba(18,20,26,.9);border:1px solid rgba(255,255,255,.22);box-shadow:0 10px 26px rgba(0,0,0,.4);pointer-events:none;opacity:0;transform:translateY(-6px) scale(.97);transition:opacity .16s,transform .22s cubic-bezier(.3,1.3,.5,1)}
+.peek.on{opacity:1;transform:none}
+.peek p{margin:0 2px 8px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.peek img{display:block;width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:#0b0c10}
+.peek small{display:block;margin:6px 2px 0;font-size:11.5px;color:var(--ink-soft)}
+.sizes .tog{padding:0 6px}
 .mic .slash{display:none}
 .mic-off .mic{color:#ff6b6b}
 .mic-off .mic .slash{display:inline}
@@ -259,6 +279,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <button class="chip" data-go="settings">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.500v2M8 12.500v2M1.500 8h2M12.500 8h2M3.400 3.400l1.400 1.400M11.200 11.200l1.400 1.400M12.600 3.400l-1.400 1.400M4.800 11.200l-1.400 1.400"/></svg>
         <span>Einstellungen</span></button>
+      <button class="chip day num" data-go="cal" id="bDay" title="Kalender"></button>
       <button class="chip icon mic" id="bMic" title="Mikrofon stumm schalten" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 009 0M8 12v2"/><path class="slash" d="M2.5 2.5l11 11"/></svg></button>
       <button class="chip icon" id="bSnip" title="Bildschirmausschnitt aufnehmen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5V3.5A1.5 1.5 0 013.5 2H5M11 2h1.5A1.5 1.5 0 0114 3.5V5M14 11v1.5a1.5 1.5 0 01-1.5 1.5H11M5 14H3.5A1.5 1.5 0 012 12.500V11"/><circle cx="8" cy="8" r="2"/></svg></button>
       <button class="chip icon" data-go="notes" title="Notizen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.500h10v7.500l-3.500 3.500H3z"/><path d="M9.500 13.500V10H13M5.500 5.500h5M5.500 8h3"/></svg></button>
@@ -325,6 +346,17 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </div>
   </div>
 
+  <!-- Kalender -->
+  <div class="view big v-cal" data-view="cal">
+    <button class="back" data-go="hub"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <div class="cal-head"><strong id="calTitle"></strong>
+      <button id="calPrev" title="Vorheriger Monat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7.500 2.500L4 6l3.500 3.500"/></svg></button>
+      <button id="calToday" title="Heute"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="2.400"/></svg></button>
+      <button id="calNext" title="Nächster Monat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4.500 2.500L8 6 4.500 9.500"/></svg></button>
+    </div>
+    <div class="calg num" id="calGrid"></div>
+  </div>
+
   <!-- Einstellungen der Insel -->
   <div class="view big v-settings" data-view="settings">
     <button class="back" data-go="hub"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
@@ -339,6 +371,16 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </div>
     <div class="toggles">
       <button class="tog" id="tWinKey" aria-pressed="false">Windows-Taste öffnet Insel-Menü</button>
+    </div>
+    <div class="toggles">
+      <button class="tog" id="tMicKey" aria-pressed="false">Mikro stumm mit Strg+Umschalt+F11</button>
+    </div>
+    <div class="toggles sizes">
+      <span class="cap" style="width:auto;align-self:center;padding-right:4px">Größe</span>
+      <button class="tog" data-scale="0.85" aria-pressed="false">Klein</button>
+      <button class="tog" data-scale="1" aria-pressed="false">Normal</button>
+      <button class="tog" data-scale="1.15" aria-pressed="false">Groß</button>
+      <button class="tog" data-scale="1.3" aria-pressed="false">Riesig</button>
     </div>
     <div class="toggles">
       <button class="tog" data-go="look">Aussehen …</button>
@@ -397,6 +439,10 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <button class="tog" data-widget="calendar" aria-pressed="false">Kalender</button>
       <button class="tog" data-widget="system" aria-pressed="false">System</button>
     </div>
+    <div class="toggles">
+      <button class="tog" data-widget="music" aria-pressed="false">Musik</button>
+      <button class="tog" data-widget="note" aria-pressed="false">Notiz</button>
+    </div>
     <p class="hint">Widgets liegen hinter deinen Fenstern und lassen sich mit der Maus verschieben.</p>
   </div>
 
@@ -418,6 +464,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
   <!-- Meldung -->
   <div class="view v-toast" data-view="toast"><span class="dot"></span><div><p class="who" id="toastWho"></p><p id="toastText"></p></div></div>
 </div>
+<div class="peek" id="peek"><p id="peekTitle"></p><img id="peekImg" alt=""><small id="peekMore"></small></div>
 <script src="renderer.js"></script>
 </body>
 </html>

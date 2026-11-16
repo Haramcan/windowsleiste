@@ -74,6 +74,9 @@ internal static class Program
             case "wallpaper": Look.SetWallpaper(r.GetProperty("path").GetString() ?? ""); break;
             case "frames": Frames.Set(r.GetProperty("on").GetBoolean()); break;
             case "notify": Notifications.Enabled = r.GetProperty("on").GetBoolean(); break;
+            case "winthumb":
+                { long h = r.GetProperty("h").GetInt64(); Emit(new { t = "winthumb", h, data = Thumbs.Get(new IntPtr(h)) }); }
+                break;
             case "appicon":
                 { var id = r.GetProperty("id").GetString() ?? ""; Emit(new { t = "appicon", id, data = AppIcons.Get(id) }); }
                 break;

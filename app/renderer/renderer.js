@@ -18,6 +18,7 @@
     if (was === 'mixer' && s !== 'mixer') api.mixer(false);
     $$('.view').forEach(v => { v.inert = v.dataset.view !== s; });
     reportRect();
+    if (s !== 'hub' && s !== 'start') { const p = document.getElementById('peek'); if (p) p.classList.remove('on'); }
   }
   // Dem Hauptprozess laufend sagen, wo die Insel im Fenster liegt (auch während sie wächst oder schrumpft).
   function sendRect() { const r = island.getBoundingClientRect(); api.rect({ left: r.left, top: r.top, width: r.width, height: r.height }); }
@@ -112,11 +113,12 @@
   function placeGlass() {
     if (!geo || !geo.win || !geo.display) return;
     const r = island.getBoundingClientRect();
-    const cx = geo.win.x + r.left + r.width / 2;
-    const ay = geo.anchor === 'bottom' ? geo.win.y + geo.win.h - M : geo.win.y + M;
+    const z = geo.z || 1;   // Fenster und Bildschirm sind in Bildschirmpunkten angegeben, die Seite rechnet in vergrößerten Punkten
+    const cx = geo.win.x + (r.left + r.width / 2) * z;
+    const ay = geo.anchor === 'bottom' ? geo.win.y + geo.win.h - M * z : geo.win.y + M * z;
     const s = island.style;
-    s.setProperty('--vx', (geo.display.x - cx) + 'px'); s.setProperty('--vy', (geo.display.y - ay) + 'px');
-    s.setProperty('--vw', geo.display.width + 'px'); s.setProperty('--vh', geo.display.height + 'px');
+    s.setProperty('--vx', (geo.display.x - cx) / z + 'px'); s.setProperty('--vy', (geo.display.y - ay) / z + 'px');
+    s.setProperty('--vw', geo.display.width / z + 'px'); s.setProperty('--vh', geo.display.height / z + 'px');
   }
   function stopGlass() {
     if (glassStream) glassStream.getTracks().forEach(t => t.stop());
@@ -174,7 +176,7 @@
     // Die Übersicht wächst mit der Zahl der Symbole (bis zur Fensterbreite).
     const n = 2 + d.pins.length + d.others.length, seps = d.others.length ? 2 : 1;
     const w = n * 44 + seps * 13 + 32;
-    island.style.setProperty('--hubw', Math.max(480, Math.min(760, w)) + 'px');
+    island.style.setProperty('--hubw', Math.max(560, Math.min(800, w)) + 'px');
   }
   renderApps({ pins: [], others: [] });
   api.on('apps', renderApps);
@@ -213,6 +215,7 @@
     const d = new Date();
     $('#clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     $('#date').textContent = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    $('#bDay').textContent = $('#date').textContent;
   }
   tick(); setInterval(tick, 5000);
 
@@ -273,6 +276,56 @@
   toggle('#tTaskbar', api.setHideTaskbar);
   toggle('#tAuto', api.setAutostart);
   toggle('#tWinKey', api.setWinKey);
+  toggle('#tMicKey', api.setMicKey);
+  function showScale(v) { $$('[data-scale]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.scale === v)); }
+  $$('[data-scale]').forEach(b => b.addEventListener('click', () => { showScale(+b.dataset.scale); api.setScale(+b.dataset.scale); }));
+
+  // ---------- Kalender ----------
+  let calY = 0, calM = 0;
+  function drawCal() {
+    const now = new Date(), first = new Date(calY, calM, 1);
+    $('#calTitle').textContent = first.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    const lead = (first.getDay() + 6) % 7, days = new Date(calY, calM + 1, 0).getDate(), prevDays = new Date(calY, calM, 0).getDate();
+    let h = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(x => '<span class="hd">' + x + '</span>').join('');
+    for (let i = lead; i > 0; i--) h += '<span class="out">' + (prevDays - i + 1) + '</span>';
+    for (let i = 1; i <= days; i++) h += '<span' + (i === now.getDate() && calM === now.getMonth() && calY === now.getFullYear() ? ' class="today"' : '') + '>' + i + '</span>';
+    for (let i = 1; (lead + days + i - 1) % 7 !== 0; i++) h += '<span class="out">' + i + '</span>';
+    $('#calGrid').innerHTML = h;
+  }
+  function calNow() { const n = new Date(); calY = n.getFullYear(); calM = n.getMonth(); drawCal(); }
+  $('#calPrev').addEventListener('click', () => { if (--calM < 0) { calM = 11; calY--; } drawCal(); });
+  $('#calNext').addEventListener('click', () => { if (++calM > 11) { calM = 0; calY++; } drawCal(); });
+  $('#calToday').addEventListener('click', calNow);
+  $('#bDay').addEventListener('click', calNow);
+  calNow();
+
+  // ---------- Vorschau eines Fensters beim Überfahren eines Programms ----------
+  const peek = $('#peek');
+  let peekT = null, peekFor = null;
+  function hidePeek() { clearTimeout(peekT); peekFor = null; peek.classList.remove('on'); }
+  ['#apps', '#sApps'].forEach(sel => {
+    $(sel).addEventListener('mouseover', e => {
+      const b = e.target.closest('.app.running');
+      if (!b) return hidePeek();
+      if (peekFor === b) return;
+      hidePeek(); peekFor = b;
+      peekT = setTimeout(async () => {
+        const info = await api.winThumb(b.dataset.kind, +b.dataset.i);
+        if (peekFor !== b || !info || drag) return;
+        $('#peekTitle').textContent = info.title || '';
+        $('#peekImg').hidden = !info.data; if (info.data) $('#peekImg').src = info.data;
+        $('#peekMore').textContent = info.count > 1 ? '+ ' + (info.count - 1) + ' weitere Fenster' : (info.data ? '' : 'Fenster ist minimiert');
+        // unter der Insel (oder darüber, wenn sie unten sitzt), mittig unter dem Symbol
+        const r = b.getBoundingClientRect(), ir = island.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+        peek.style.left = Math.max(8, Math.min(vw - 308, r.left + r.width / 2 - 150)) + 'px';
+        if (island.dataset.anchor === 'bottom') { peek.style.top = ''; peek.style.bottom = (document.documentElement.clientHeight - ir.top + 8) + 'px'; }
+        else { peek.style.bottom = ''; peek.style.top = (ir.bottom + 8) + 'px'; }
+        peek.classList.add('on');
+      }, 380);
+    });
+    $(sel).addEventListener('mouseleave', hidePeek);
+    $(sel).addEventListener('mousedown', hidePeek);
+  });
   $('#bMic').addEventListener('click', () => api.micToggle());
   $('#bSnip').addEventListener('click', () => { setState('idle'); api.snip(); });
 
@@ -379,6 +432,7 @@
   }, 1000);
 
   // ---------- Ereignisse vom Helfer ----------
+  let micSeen = false, micWas = false;
   api.on('ev', ev => {
     if (ev.t === 'media') { media = Object.assign({ at: Date.now() }, ev); showMedia(); }
     else if (ev.t === 'thumb') island.style.setProperty('--art', ev.data ? 'url("' + ev.data + '")' : noArt);
@@ -393,7 +447,10 @@
     else if (ev.t === 'update') showUpdate(ev);
     else if (ev.t === 'blur') { if (sticky(state)) setState('idle'); }
     else if (ev.t === 'winkey') { if (state === 'start') closeBack(); else setState('start'); }
-    else if (ev.t === 'mic') { island.classList.toggle('has-mic', !!ev.has); island.classList.toggle('mic-off', !!ev.has && !!ev.muted); $('#bMic').hidden = !ev.has; $('#tMic').hidden = !ev.has; $('#tMic').setAttribute('aria-pressed', !!ev.muted); $('#bMic').title = ev.muted ? 'Mikrofon ist stumm – einschalten' : 'Mikrofon stumm schalten'; }
+    else if (ev.t === 'mic') {
+      if (micSeen && ev.has && ev.muted !== micWas && (state === 'idle' || state === 'vol' || state === 'toast')) toast(ev.muted ? 'Mikrofon ist stumm' : 'Mikrofon ist an', 1600);
+      if (ev.has) { micSeen = true; micWas = ev.muted; }   // erst ab dem ersten echten Zustand vergleichen, sonst meldet sich die Insel beim Start
+      island.classList.toggle('has-mic', !!ev.has); island.classList.toggle('mic-off', !!ev.has && !!ev.muted); $('#bMic').hidden = !ev.has; $('#tMic').hidden = !ev.has; $('#tMic').setAttribute('aria-pressed', !!ev.muted); $('#bMic').title = ev.muted ? 'Mikrofon ist stumm – einschalten' : 'Mikrofon stumm schalten'; }
     else if (ev.t === 'mixer') renderMixer(ev.list || []);
     else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
@@ -411,7 +468,8 @@
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
     $('#tHideFs').setAttribute('aria-pressed', s.hideFullscreen !== false);
     locked = !!s.locked; $('#tLock').setAttribute('aria-pressed', locked);
-    $('#tWinKey').setAttribute('aria-pressed', !!s.winKey); $('#note').value = s.note || '';
+    $('#tWinKey').setAttribute('aria-pressed', !!s.winKey);
+    $('#tMicKey').setAttribute('aria-pressed', s.micKey !== false); showScale(s.scale || 1); $('#note').value = s.note || '';
     island.classList.toggle('clear', !!s.clear); $('#tClear').setAttribute('aria-pressed', !!s.clear);
     showNotifyState(s.notify);
     (s.widgets || []).forEach(w => { const b = document.querySelector('[data-widget="' + w.name + '"]'); if (b) b.setAttribute('aria-pressed', !!w.on); });

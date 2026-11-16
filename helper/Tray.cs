@@ -146,3 +146,49 @@ internal static class AppIcons
         finally { Marshal.ReleaseComObject(factory); }
     }
 }
+
+// Vorschaubild eines Fensters (für das Überfahren eines Programms in der Insel).
+internal static class Thumbs
+{
+    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr h);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr h, IntPtr dc);
+    [DllImport("user32.dll")] private static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleBitmap(IntPtr dc, int w, int h);
+    [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+    [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr h);
+
+    public static string Get(IntPtr h)
+    {
+        if (!Native.IsWindow(h) || Native.IsIconic(h)) return "";
+        if (!Native.GetWindowRect(h, out var r)) return "";
+        int w = r.Right - r.Left, ht = r.Bottom - r.Top;
+        if (w < 40 || ht < 40 || w > 8000 || ht > 8000) return "";
+        IntPtr screen = GetDC(IntPtr.Zero), mem = IntPtr.Zero, bmp = IntPtr.Zero;
+        try
+        {
+            mem = CreateCompatibleDC(screen);
+            bmp = CreateCompatibleBitmap(screen, w, ht);
+            var old = SelectObject(mem, bmp);
+            bool ok = PrintWindow(h, mem, 2 /* auch Inhalte, die die Grafikkarte zeichnet */);
+            SelectObject(mem, old);
+            if (!ok) return "";
+            var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(bmp, IntPtr.Zero, System.Windows.Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            double scale = Math.Min(1.0, Math.Min(320.0 / w, 200.0 / ht));
+            var small = new TransformedBitmap(src, new System.Windows.Media.ScaleTransform(scale, scale));
+            var enc = new JpegBitmapEncoder { QualityLevel = 80 };
+            enc.Frames.Add(BitmapFrame.Create(small));
+            using var ms = new MemoryStream();
+            enc.Save(ms);
+            return "data:image/jpeg;base64," + Convert.ToBase64String(ms.ToArray());
+        }
+        catch { return ""; }
+        finally
+        {
+            if (bmp != IntPtr.Zero) DeleteObject(bmp);
+            if (mem != IntPtr.Zero) DeleteDC(mem);
+            ReleaseDC(IntPtr.Zero, screen);
+        }
+    }
+}

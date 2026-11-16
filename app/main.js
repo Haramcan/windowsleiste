@@ -7,12 +7,16 @@ const { spawn } = require('child_process');
 const readline = require('readline');
 const os = require('os');
 
-const WIN_W = 820, WIN_H = 560;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
+const WIN_W = 900, WIN_H = 560;   // Fenster ist größer als die Insel, der Rest ist durchsichtig
 const M = 24;                     // Rand um die Insel (Platz für den Schatten)
 const IDLE_W = 232;
+// Größe der Insel: Alles wird um diesen Faktor vergrößert, das Fenster wächst mit.
+const SCALES = [0.85, 1, 1.15, 1.3];
+const Z = () => (SCALES.includes(cfg.scale) ? cfg.scale : 1);
+const W = () => Math.round(WIN_W * Z()), H = () => Math.round(WIN_H * Z());
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, scale: 1, micKey: true, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
 let lastTray = { t: 'tray', ok: false, icons: [] }, lastMic = { t: 'mic', has: false, muted: false };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
@@ -49,22 +53,24 @@ function defaultPos() {
   const wa = screen.getPrimaryDisplay().workArea;
   return { cx: Math.round(wa.x + wa.width / 2), y: wa.y + 12, anchor: 'top' };
 }
-const offscreen = () => win.setBounds({ x: -30000, y: -30000, width: WIN_W, height: WIN_H });
+const offscreen = () => win.setBounds({ x: -30000, y: -30000, width: W(), height: H() });
 function applyPos() {
   if (hiddenForFullscreen && !peeking) return offscreen();
   if (!cfg.pos) cfg.pos = defaultPos();
   const p = cfg.pos;
   const disp = screen.getDisplayNearestPoint({ x: p.cx, y: p.y }), d = disp.bounds;
-  p.cx = Math.min(Math.max(p.cx, d.x + IDLE_W / 2 + 8), d.x + d.width - IDLE_W / 2 - 8);
+  const z = Z(), idle = IDLE_W * z;
+  p.cx = Math.min(Math.max(p.cx, d.x + idle / 2 + 8), d.x + d.width - idle / 2 - 8);
   p.y = Math.min(Math.max(p.y, d.y + 4), d.y + d.height - 4);
-  const x = Math.round(p.cx - WIN_W / 2);
-  const y = Math.round(p.anchor === 'bottom' ? p.y + M - WIN_H : p.y - M);
-  win.setBounds({ x, y, width: WIN_W, height: WIN_H });
+  const x = Math.round(p.cx - W() / 2);
+  const y = Math.round(p.anchor === 'bottom' ? p.y + M * z - H() : p.y - M * z);
+  win.setBounds({ x, y, width: W(), height: H() });
   send('layout', {
     anchor: p.anchor,
-    insetL: Math.max(0, d.x - x),
-    insetR: Math.max(0, x + WIN_W - (d.x + d.width)),
-    win: { x, y, w: WIN_W, h: WIN_H },
+    insetL: Math.max(0, d.x - x) / z,
+    insetR: Math.max(0, x + W() - (d.x + d.width)) / z,
+    z,
+    win: { x, y, w: W(), h: H() },
     display: { id: String(disp.id), x: d.x, y: d.y, width: d.width, height: d.height }
   });
 }
@@ -149,6 +155,8 @@ function startHelper() {
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
     else if (ev.t === 'winkey') onWinKey();
+    else if (ev.t === 'winthumb') { const w = thumbWait.get(ev.h); if (w) { thumbWait.delete(ev.h); w(ev.data || ''); } }
+    else if (ev.t === 'media' || ev.t === 'thumb') { if (ev.t === 'media') lastMedia = ev; else lastThumb = ev; send('ev', ev); toWidget('music', ev); }
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
     else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
     else if (ev.t === 'fullscreen') {
@@ -209,7 +217,15 @@ setInterval(() => {
 }, 100);
 
 // ---------- Widgets: kleine Glaskarten direkt auf dem Desktop ----------
-const WIDGETS = { clock: { w: 232, h: 132 }, calendar: { w: 232, h: 268 }, system: { w: 232, h: 150 } };
+const WIDGETS = { clock: { w: 232, h: 132 }, calendar: { w: 232, h: 268 }, system: { w: 232, h: 150 }, music: { w: 300, h: 150 }, note: { w: 232, h: 210 } };
+let lastMedia = { t: 'media', has: false }, lastThumb = { t: 'thumb', data: '' };
+function toWidget(name, data) { const w = widgetWins[name]; if (w && !w.isDestroyed()) w.webContents.send('data', data); }
+// Jedes Widget bekommt das Hintergrundbild und seine Lage, damit es dieses unscharf hinter sich zeigen kann.
+function widgetGeo(name) {
+  const w = widgetWins[name]; if (!w || w.isDestroyed()) return;
+  const b = w.getBounds(), d = screen.getDisplayMatching(b).bounds;
+  w.webContents.send('data', { t: 'geo', x: d.x - b.x, y: d.y - b.y, w: d.width, h: d.height, wall: cfg.glass ? wallpaperUrl() : '' });
+}
 const widgetWins = {};
 const widgetState = () => Object.keys(WIDGETS).map(k => ({ name: k, on: !!(cfg.widgets[k] && cfg.widgets[k].on) }));
 function sinkWidget(name) {
@@ -223,7 +239,7 @@ function openWidget(name) {
   const wa = screen.getPrimaryDisplay().workArea;
   if (typeof c.x !== 'number') {
     const i = Object.keys(WIDGETS).indexOf(name);
-    c.x = wa.x + 24; c.y = wa.y + 80 + [0, 290, 140][i];
+    c.x = wa.x + 24; c.y = wa.y + 80 + [0, 290, 140, 300, 460][i];
     if (name === 'calendar') { c.x = wa.x + 24 + 240; c.y = wa.y + 80; }
   }
   const w = new BrowserWindow({
@@ -235,7 +251,13 @@ function openWidget(name) {
   widgetWins[name] = w;
   w.loadFile(path.join(__dirname, 'renderer', 'widget.html'), { hash: name });
   w.once('ready-to-show', () => { w.showInactive(); sinkWidget(name); });
-  w.on('moved', () => { const b = w.getBounds(); c.x = b.x; c.y = b.y; saveCfg(); });
+  w.webContents.on('did-finish-load', () => {
+    widgetGeo(name);
+    if (name === 'music') { toWidget(name, lastMedia); toWidget(name, lastThumb); }
+    if (name === 'note') toWidget(name, { t: 'note', text: String(cfg.note || '') });
+  });
+  w.on('move', () => widgetGeo(name));
+  w.on('moved', () => { const b = w.getBounds(); c.x = b.x; c.y = b.y; saveCfg(); widgetGeo(name); });
   w.on('closed', () => { delete widgetWins[name]; });
 }
 function closeWidget(name) { const w = widgetWins[name]; if (w && !w.isDestroyed()) w.destroy(); }
@@ -267,7 +289,7 @@ function protect() {
 }
 function createWindow() {
   win = new BrowserWindow({
-    width: WIN_W, height: WIN_H, show: false,
+    width: W(), height: H(), show: false,
     frame: false, transparent: true, resizable: false, movable: false, hasShadow: false,
     skipTaskbar: true, focusable: false, alwaysOnTop: true, fullscreenable: false, maximizable: false, minimizable: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
@@ -277,6 +299,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => { applyPos(); win.showInactive(); protect(); });
   win.on('blur', () => send('ev', { t: 'blur' }));
+  win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(Z()));
   screen.on('display-metrics-changed', applyPos);
   screen.on('display-removed', applyPos);
 }
@@ -284,7 +307,7 @@ function createWindow() {
 ipcMain.handle('ready', () => {
   setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', lastMic); send('ev', updateState); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: cfg.glass, wall: wallpaperUrl(), locked: !!cfg.locked, clear: !!cfg.clear, hideFullscreen: cfg.hideFullscreen !== false, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
+           glass: cfg.glass, wall: wallpaperUrl(), scale: Z(), micKey: cfg.micKey !== false, locked: !!cfg.locked, clear: !!cfg.clear, hideFullscreen: cfg.hideFullscreen !== false, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
@@ -315,15 +338,40 @@ function wallpaperUrl() {
   } catch (_) { wallCache = { m: -1, url: '' }; }
   return wallCache.url;
 }
-setInterval(() => { const before = wallCache.url, now = wallpaperUrl(); if (now !== before) send('ev', { t: 'wall', data: now }); }, 4000);
+setInterval(() => {
+  const before = wallCache.url, now = wallpaperUrl();
+  if (now !== before) { send('ev', { t: 'wall', data: now }); Object.keys(widgetWins).forEach(widgetGeo); }
+}, 4000);
 ipcMain.on('set-hide-fullscreen', (_e, b) => { cfg.hideFullscreen = !!b; saveCfg(); setHidden(fullscreenNow && cfg.hideFullscreen); });
+ipcMain.on('set-scale', (_e, v) => {
+  if (!SCALES.includes(v)) return;
+  cfg.scale = v; saveCfg(); win.webContents.setZoomFactor(v); applyPos();
+});
+// Tastenkürzel: Mikrofon stumm schalten, ohne die Insel zu öffnen
+const MIC_KEY = 'Control+Shift+F11';
+function applyMicKey() {
+  try { globalShortcut.unregister(MIC_KEY); if (cfg.micKey !== false) globalShortcut.register(MIC_KEY, () => sendHelper({ c: 'micmute' })); } catch (_) {}
+}
+ipcMain.on('set-mic-key', (_e, b) => { cfg.micKey = !!b; saveCfg(); applyMicKey(); });
+// Vorschaubild des Fensters, wenn die Maus über einem laufenden Programm steht
+const thumbWait = new Map();
+ipcMain.handle('win-thumb', (_e, { kind, i }) => new Promise(resolve => {
+  const a = (kind === 'pin' ? lastApps.pins : lastApps.others)[i];
+  if (!a || !a.wins.length || !helper) return resolve(null);
+  const h = a.wins[0], w = lastWindows.find(x => x.h === h);
+  const info = { title: w ? w.title : a.name, count: a.wins.length, data: '' };
+  const t = setTimeout(() => { thumbWait.delete(h); resolve(info); }, 1500);
+  thumbWait.set(h, data => { clearTimeout(t); info.data = data; resolve(info); });
+  sendHelper({ c: 'winthumb', h });
+}));
 ipcMain.on('set-winkey', (_e, b) => { cfg.winKey = !!b; saveCfg(); sendHelper({ c: 'winkey', on: cfg.winKey }); });
 ipcMain.on('mic-toggle', () => sendHelper({ c: 'micmute' }));
 ipcMain.on('snip', () => setTimeout(() => sendHelper({ c: 'snip' }), 350));
 ipcMain.on('mixer', (_e, on) => sendHelper({ c: 'mixer', on: !!on }));
 ipcMain.on('app-vol', (_e, { name, v }) => sendHelper({ c: 'appvol', name: String(name), v: Math.max(0, Math.min(1, +v || 0)) }));
 let noteT = null;
-ipcMain.on('note-save', (_e, text) => { cfg.note = String(text || '').slice(0, 20000); clearTimeout(noteT); noteT = setTimeout(saveCfg, 600); });
+ipcMain.on('note-save', (_e, text) => { cfg.note = String(text || '').slice(0, 20000); clearTimeout(noteT); noteT = setTimeout(saveCfg, 600); toWidget('note', { t: 'note', text: cfg.note }); });
+ipcMain.on('widget-media', (_e, a) => { if (['toggle', 'next', 'prev'].includes(a)) sendHelper({ c: 'media', a }); });
 ipcMain.on('pin-move', (_e, { from, to }) => {
   if (!cfg.pins[from] || to < 0 || to >= cfg.pins.length || from === to) return;
   cfg.pins.splice(to, 0, cfg.pins.splice(from, 1)[0]); saveCfg(); pushApps();
@@ -419,7 +467,7 @@ ipcMain.on('ignore', (_e, b) => { if (!drag) win.setIgnoreMouseEvents(!!b, { for
 // Sicherheitsnetz: Liegt der Mauszeiger über der Insel, nimmt das Fenster Klicks an, egal was vorher war.
 // (Nach einem Vollbild-Spiel kam das Signal der Oberfläche sonst manchmal nicht mehr an.)
 let islandRect = null;
-ipcMain.on('rect', (_e, r) => { islandRect = r; });
+ipcMain.on('rect', (_e, r) => { const z = Z(); islandRect = { left: r.left * z, top: r.top * z, width: r.width * z, height: r.height * z }; });
 setInterval(() => {
   if (!win || win.isDestroyed() || !win.isVisible() || drag || !islandRect) return;
   const c = screen.getCursorScreenPoint(), b = win.getBounds();
@@ -476,13 +524,14 @@ ipcMain.on('drag-move', () => {
   if (!drag) return;
   const c = screen.getCursorScreenPoint();
   const x = drag.x + c.x - drag.cx, y = drag.y + c.y - drag.cy;
-  win.setBounds({ x, y, width: WIN_W, height: WIN_H });
+  win.setBounds({ x, y, width: W(), height: H() });
   send('winpos', { x, y });
 });
 ipcMain.on('drag-end', (_e, rect) => {
   if (!drag) return;
   drag = null;
-  const b = win.getBounds();
+  const b = win.getBounds(), z = Z();
+  rect = { top: rect.top * z, left: rect.left * z, width: rect.width * z, height: rect.height * z };
   const top = b.y + rect.top, cx = b.x + rect.left + rect.width / 2;
   const d = screen.getDisplayNearestPoint({ x: Math.round(cx), y: Math.round(top) }).bounds;
   const anchor = top + rect.height / 2 > d.y + d.height / 2 ? 'bottom' : 'top';
@@ -524,7 +573,7 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
-    loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates();
+    loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates(); applyMicKey();
     // Notausgang: Strg+Umschalt+F12 beendet die Insel immer und holt die alte Taskleiste zurück.
     try { globalShortcut.register('Control+Shift+F12', () => { cleanup(); setTimeout(() => app.exit(0), 900); }); } catch (_) {}
     for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);

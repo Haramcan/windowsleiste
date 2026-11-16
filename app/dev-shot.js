@@ -58,7 +58,7 @@ module.exports = win => {
       } catch (e) { log('Windows-Taste: Fehler ' + e.message); }
       await js(`document.querySelector('#island').dataset.state='idle'`);
     }
-    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'settings', 'mixer', 'notes', 'vol', 'start']) {
+    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'settings', 'cal', 'mixer', 'notes', 'vol', 'start']) {
       await win.webContents.executeJavaScript(s === 'start' ? `document.querySelector('[data-start]').click()` : `document.querySelector('#island').dataset.state='${s}'`);
       await wait(s === 'start' ? 6000 : 900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
@@ -95,14 +95,14 @@ module.exports = win => {
     }
     // Widgets einmal öffnen und abbilden
     const { ipcMain, BrowserWindow } = require('electron');
-    for (const name of ['clock', 'calendar', 'system']) ipcMain.emit('set-widget', {}, { name, on: true });
+    for (const name of ['clock', 'calendar', 'system', 'music', 'note']) ipcMain.emit('set-widget', {}, { name, on: true });
     await wait(3500);
     for (const w of BrowserWindow.getAllWindows()) {
       if (w === win) continue;
       const kind = new URL(w.webContents.getURL()).hash.slice(1);
       try { fs.writeFileSync(path.join(out, 'widget-' + kind + '.png'), (await w.webContents.capturePage()).toPNG()); } catch (_) {}
     }
-    for (const name of ['clock', 'calendar', 'system']) ipcMain.emit('set-widget', {}, { name, on: false });
+    for (const name of ['clock', 'calendar', 'system', 'music', 'note']) ipcMain.emit('set-widget', {}, { name, on: false });
     ipcMain.emit('quit');
   });
 };

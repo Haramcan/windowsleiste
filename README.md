@@ -13,7 +13,9 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Milchglas:** Dein Hintergrundbild verschwimmt hinter der Insel. Wahlweise Live-Milchglas, das auch Fenster dahinter zeigt, dann aber in Screenshots und Übertragungen unsichtbar ist
 - **Alte Taskleiste ausgeblendet**, beim Beenden kommt sie zurück
 - **Aussehen:** heller/dunkler Modus, Desktop-Symbole, Hintergrundbild, Fensterrahmen im Insel-Stil
-- **Widgets** auf dem Desktop: Uhr, Kalender, System
+- **Widgets** auf dem Desktop mit Milchglas: Uhr, Kalender, System, Musik, Notiz
+- **Kalender** beim Klick aufs Datum, **Fenster-Vorschau** beim Überfahren eines Programms
+- **Größe** der Insel einstellbar; Mikrofon stumm per `Strg+Umschalt+F11`
 - **Eigenes Startmenü** in der Insel: alle Programme mit Suche, dazu Sperren, Neu starten, Herunterfahren
 - **Frei verschieben** oder Position sperren; wahlweise komplett durchsichtig
 - Versteckt sich bei Spielen und Videos im Vollbild; kurz mit der Maus an den Bildschirmrand, und sie kommt zurück

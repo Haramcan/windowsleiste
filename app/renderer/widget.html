@@ -8,10 +8,27 @@
 :root{color-scheme:dark;--ink:#fff;--ink-soft:#c5c7cc;--accent:#ffb454;--on-accent:#2a1a04}
 html,body{height:100%;margin:0;background:transparent;overflow:hidden}
 body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--ink);font-size:13px;user-select:none;-webkit-user-select:none;padding:16px;box-sizing:border-box}
-.wg{height:100%;box-sizing:border-box;border-radius:24px;padding:16px;background:rgba(20,22,30,.62);border:1px solid rgba(255,255,255,.26);
+.wg{position:relative;overflow:hidden;height:100%;box-sizing:border-box;border-radius:24px;border:1px solid rgba(255,255,255,.26);
   box-shadow:0 6px 14px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.4),inset 0 0 24px rgba(255,255,255,.05);
-  background-image:linear-gradient(155deg,rgba(255,255,255,.16),rgba(255,255,255,0) 35%);
   -webkit-app-region:drag;cursor:grab}
+/* Milchglas: das Hintergrundbild liegt unscharf hinter der Karte */
+.wglass{position:absolute;inset:-40px;filter:blur(18px) saturate(1.8);pointer-events:none}
+.wglass img{position:absolute;max-width:none;object-fit:cover}
+.wtint{position:absolute;inset:0;background:rgba(20,22,30,.62);background-image:linear-gradient(155deg,rgba(255,255,255,.16),rgba(255,255,255,0) 35%)}
+.wg.glassy .wtint{background-color:rgba(20,22,30,.42)}
+.wc{position:relative;height:100%;box-sizing:border-box;padding:16px}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;-webkit-app-region:no-drag}
+.m-top{display:flex;align-items:center;gap:12px;min-width:0}
+.m-art{width:52px;height:52px;border-radius:14px;flex:none;background:linear-gradient(135deg,#ffb454,#c2456b) center/cover}
+.m-meta{min-width:0;flex:1}
+.m-meta strong,.m-meta small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-meta strong{font-size:14.5px}.m-meta small{font-size:12.5px;color:var(--ink-soft)}
+.m-ctl{display:flex;justify-content:center;gap:8px;margin-top:10px}
+.m-ctl button{width:36px;height:36px;border-radius:50%;display:grid;place-items:center}
+.m-ctl button:hover{background:rgba(255,255,255,.18)}
+.m-ctl .play{background:#fff;color:#14161c}
+.n-text{font-size:13px;line-height:1.45;white-space:pre-wrap;overflow:hidden;height:calc(100% - 24px);color:var(--ink)}
+.n-text.empty{color:var(--ink-soft)}
 h3{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
 .num{font-variant-numeric:tabular-nums}
 .w-time{font-size:40px;font-weight:700;line-height:1;letter-spacing:-.02em}
@@ -28,7 +45,7 @@ h3{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-trans
 </style>
 </head>
 <body>
-<div class="wg" id="wg"></div>
+<div class="wg" id="card"><div class="wglass"><img id="gi" alt="" hidden></div><div class="wtint"></div><div class="wc" id="wg"></div></div>
 <script src="widget.js"></script>
 </body>
 </html>
