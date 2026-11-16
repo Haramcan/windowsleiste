@@ -57,15 +57,16 @@ img{-webkit-user-drag:none}
 .island.dragging{cursor:grabbing}
 .island[data-state="hub"]{--w:var(--hubw,480px);--h:134px}
 .island[data-state="start"]{--w:600px;--h:500px}
-.island.has-mic[data-state="idle"]{--w:262px}
+.island[data-state="idle"]{--w:316px}
+.island.has-mic[data-state="idle"]{--w:346px}
 .island.has-tray[data-state="hub"]{--h:170px}
 .island.has-media[data-state="hub"]{--w:min(calc(var(--hubw,480px) + 300px),780px);--h:178px}
 .island[data-state="music"]{--w:420px;--h:196px}
-.island[data-state="quick"]{--w:400px;--h:390px}
+.island[data-state="quick"]{--w:400px;--h:206px}
+.island[data-state="settings"]{--w:420px;--h:346px}
 .island[data-state="look"]{--w:400px;--h:298px}
 .island[data-state="widgets"]{--w:400px;--h:160px}
 .island[data-state="notif"]{--w:400px;--h:264px}
-.island[data-state="timer"]{--w:330px;--h:156px}
 .island[data-state="toast"]{--w:360px;--h:64px}
 .island[data-state="mixer"]{--w:420px;--h:300px}
 .island[data-state="notes"]{--w:420px;--h:300px}
@@ -74,7 +75,7 @@ img{-webkit-user-drag:none}
 .island[data-anchor="bottom"] .view{top:auto;bottom:0}
 .island[data-state="mixer"] .v-mixer,.island[data-state="notes"] .v-notes,.island[data-state="start"] .v-start,.island[data-state="look"] .v-look,.island[data-state="widgets"] .v-widgets,.island[data-state="notif"] .v-notif,
 .island[data-state="idle"] .v-idle,.island[data-state="hub"] .v-hub,.island[data-state="music"] .v-music,.island[data-state="quick"] .v-quick,
-.island[data-state="timer"] .v-timer,.island[data-state="toast"] .v-toast,.island[data-state="vol"] .v-vol{opacity:1;pointer-events:auto;transform:none;
+.island[data-state="settings"] .v-settings,.island[data-state="toast"] .v-toast,.island[data-state="vol"] .v-vol{opacity:1;pointer-events:auto;transform:none;
   transition:opacity .22s .1s,transform .45s cubic-bezier(.3,1.3,.5,1) .06s}
 .num{font-variant-numeric:tabular-nums}
 
@@ -83,6 +84,7 @@ img{-webkit-user-drag:none}
 .idle-btn{height:34px;border-radius:999px;padding:0 9px;display:flex;align-items:center;gap:9px}
 .idle-btn:hover{background:var(--fill-hover)}
 .clock{font-size:13px;font-weight:600}
+.date{font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
 .cover{background-color:#2a2d36;background-image:var(--art);background-size:cover;background-position:center}
 
 /* Startmenü der Insel */
@@ -232,6 +234,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     <button class="idle-btn" data-go="hub">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="var(--accent)"><rect x="1" y="1" width="6.5" height="6.5" rx=".8"/><rect x="8.5" y="1" width="6.5" height="6.5" rx=".8"/><rect x="1" y="8.5" width="6.5" height="6.5" rx=".8"/><rect x="8.5" y="8.5" width="6.5" height="6.5" rx=".8"/></svg>
       <span class="clock num" id="clock">--:--</span>
+      <span class="date num" id="date"></span>
     </button>
     <span class="idle-mic mic"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 009 0M8 12v2"/><path class="slash" d="M2.5 2.5l11 11"/></svg></span>
     <button class="idle-btn" id="idleMusic" data-go="music" hidden>
@@ -253,9 +256,9 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
       <button class="chip" data-go="quick">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5h8M13 5h1M2 11h1M6 11h8"/><circle cx="11.5" cy="5" r="1.6"/><circle cx="4.5" cy="11" r="1.6"/></svg>
         <span>Regler</span></button>
-      <button class="chip" data-go="timer">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="9" r="5.2"/><path d="M8 6.5V9l1.8 1.2M6.5 1.5h3"/></svg>
-        <span class="num" id="timerChip">12:00</span></button>
+      <button class="chip" data-go="settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.500v2M8 12.500v2M1.500 8h2M12.500 8h2M3.400 3.400l1.400 1.400M11.200 11.200l1.400 1.400M12.600 3.400l-1.400 1.400M4.800 11.200l-1.400 1.400"/></svg>
+        <span>Einstellungen</span></button>
       <button class="chip icon mic" id="bMic" title="Mikrofon stumm schalten" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 009 0M8 12v2"/><path class="slash" d="M2.5 2.5l11 11"/></svg></button>
       <button class="chip icon" id="bSnip" title="Bildschirmausschnitt aufnehmen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 5V3.5A1.5 1.5 0 013.5 2H5M11 2h1.5A1.5 1.5 0 0114 3.5V5M14 11v1.5a1.5 1.5 0 01-1.5 1.5H11M5 14H3.5A1.5 1.5 0 012 12.500V11"/><circle cx="8" cy="8" r="2"/></svg></button>
       <button class="chip icon" data-go="notes" title="Notizen"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.500h10v7.500l-3.500 3.500H3z"/><path d="M9.500 13.500V10H13M5.500 5.500h5M5.500 8h3"/></svg></button>
@@ -308,15 +311,24 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </div>
   </div>
 
-  <!-- Regler -->
+  <!-- Regler: Ton -->
   <div class="view big v-quick" data-view="quick">
     <button class="back" data-go="hub"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
     <div class="label">Regler</div>
     <div class="row"><span class="cap">Lautstärke</span><input type="range" id="volQuick" min="0" max="100" value="50"><span class="q-val num" id="volVal">50</span></div>
     <div class="toggles">
-      <button class="tog" id="tMute" aria-pressed="false">Stumm</button>
+      <button class="tog" id="tMute" aria-pressed="false">Ton stumm</button>
+      <button class="tog" id="tMic" aria-pressed="false">Mikrofon stumm</button>
+    </div>
+    <div class="toggles">
       <button class="tog" data-go="mixer">Lautstärke pro Programm …</button>
     </div>
+  </div>
+
+  <!-- Einstellungen der Insel -->
+  <div class="view big v-settings" data-view="settings">
+    <button class="back" data-go="hub"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <div class="label">Einstellungen</div>
     <div class="toggles">
       <button class="tog" id="tLock" aria-pressed="false">Position sperren</button>
       <button class="tog" id="tClear" aria-pressed="false">Durchsichtig</button>
@@ -327,14 +339,15 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </div>
     <div class="toggles">
       <button class="tog" id="tWinKey" aria-pressed="false">Windows-Taste öffnet Insel-Menü</button>
-      <button class="tog plain" id="quit">Insel beenden</button>
     </div>
     <div class="toggles">
       <button class="tog" data-go="look">Aussehen …</button>
+      <button class="tog" data-go="widgets">Widgets …</button>
       <button class="tog" data-go="notif">Mitteilungen …</button>
     </div>
     <div class="toggles">
       <button class="tog" id="bUpdate">Nach Updates suchen</button>
+      <button class="tog plain" id="quit">Insel beenden</button>
     </div>
   </div>
 
@@ -354,7 +367,7 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
 
   <!-- Aussehen -->
   <div class="view big v-look" data-view="look">
-    <button class="back" data-go="quick"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <button class="back" data-go="settings"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
     <div class="label">Aussehen</div>
     <div class="toggles">
       <button class="tog" id="tGlass" aria-pressed="false">Milchglas</button>
@@ -372,13 +385,12 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
     </div>
     <div class="toggles">
       <button class="tog" id="bWall">Hintergrundbild wählen …</button>
-      <button class="tog" data-go="widgets">Widgets …</button>
     </div>
   </div>
 
   <!-- Widgets -->
   <div class="view big v-widgets" data-view="widgets">
-    <button class="back" data-go="look"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <button class="back" data-go="settings"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
     <div class="label">Widgets auf dem Desktop</div>
     <div class="toggles">
       <button class="tog" data-widget="clock" aria-pressed="false">Uhr</button>
@@ -390,23 +402,11 @@ input[type=range]{accent-color:var(--accent);flex:1;min-width:0;height:20px;marg
 
   <!-- Mitteilungen -->
   <div class="view big v-notif" data-view="notif">
-    <button class="back" data-go="quick"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
+    <button class="back" data-go="settings"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
     <div class="label">Mitteilungen</div>
     <div class="toggles"><button class="tog" id="tNotify" aria-pressed="true">In der Insel anzeigen</button></div>
     <p class="hint" id="nHint">Programme erscheinen hier, sobald sie eine Mitteilung geschickt haben. Dann kannst du sie einzeln abschalten.</p>
     <div class="nlist" id="nList"></div>
-  </div>
-
-  <!-- Timer -->
-  <div class="view big v-timer" data-view="timer">
-    <button class="back" data-go="hub"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 9l4-4 4 4"/></svg></button>
-    <div class="label">Timer</div>
-    <div class="time num" id="time">12:00</div>
-    <div class="row">
-      <button class="pill main" id="tToggle">Start</button>
-      <button class="pill" id="tPlus">+1 Min</button>
-      <button class="pill" id="tReset">Zurücksetzen</button>
-    </div>
   </div>
 
   <!-- Lautstärke-Anzeige -->

@@ -58,7 +58,7 @@ module.exports = win => {
       } catch (e) { log('Windows-Taste: Fehler ' + e.message); }
       await js(`document.querySelector('#island').dataset.state='idle'`);
     }
-    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'mixer', 'notes', 'timer', 'vol', 'start']) {
+    for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'settings', 'mixer', 'notes', 'vol', 'start']) {
       await win.webContents.executeJavaScript(s === 'start' ? `document.querySelector('[data-start]').click()` : `document.querySelector('#island').dataset.state='${s}'`);
       await wait(s === 'start' ? 6000 : 900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());

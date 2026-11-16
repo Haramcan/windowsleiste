@@ -209,7 +209,11 @@
   $('#sTray').addEventListener('contextmenu', e => { const b = e.target.closest('[data-ti]'); if (b && trayIcons[+b.dataset.ti]) { e.preventDefault(); api.trayClick(trayIcons[+b.dataset.ti].id, 'right'); } });
 
   // ---------- Uhr ----------
-  function tick() { const d = new Date(); $('#clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function tick() {
+    const d = new Date();
+    $('#clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    $('#date').textContent = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  }
   tick(); setInterval(tick, 5000);
 
   // ---------- Musik ----------
@@ -260,6 +264,7 @@
   $('#volMusic').addEventListener('input', sendVol);
   $('#volQuick').addEventListener('input', sendVol);
   $('#tMute').addEventListener('click', () => api.helper({ c: 'mute' }));
+  $('#tMic').addEventListener('click', () => api.micToggle());
 
   // ---------- Einstellungen ----------
   function toggle(id, fn) {
@@ -305,7 +310,7 @@
       : u.state === 'current' ? v + ' · aktuell'
       : u.state === 'error' ? v + ' · Suche fehlgeschlagen, nochmal versuchen'
       : v + ' · nach Updates suchen';
-    if (u.state === 'ready' && updToastFor !== u.next && (state === 'idle' || state === 'vol')) { updToastFor = u.next; toast('Regler → Update installieren', 6000, 'Update ' + u.next + ' ist bereit'); }
+    if (u.state === 'ready' && updToastFor !== u.next && (state === 'idle' || state === 'vol')) { updToastFor = u.next; toast('Einstellungen → Update installieren', 6000, 'Update ' + u.next + ' ist bereit'); }
   }
   $('#bUpdate').addEventListener('click', () => { if (upd.state === 'ready') api.updateInstall(); else api.updateCheck(); });
 
@@ -368,17 +373,9 @@
   });
   $('#quit').addEventListener('click', () => api.quit());
 
-  // ---------- Timer ----------
-  let left = 720, running = false;
-  function showTimer() { const s = fmt(left).padStart(5, '0'); $('#time').textContent = s; $('#timerChip').textContent = s; $('#tToggle').textContent = running ? 'Pause' : 'Start'; }
-  $('#tToggle').addEventListener('click', () => { if (left > 0) { running = !running; showTimer(); } });
-  $('#tPlus').addEventListener('click', () => { left += 60; showTimer(); });
-  $('#tReset').addEventListener('click', () => { left = 720; running = false; showTimer(); });
-  showTimer();
 
   setInterval(() => {
     showPos();
-    if (running) { left--; if (left <= 0) { left = 0; running = false; toast('Timer abgelaufen', 4000); } showTimer(); }
   }, 1000);
 
   // ---------- Ereignisse vom Helfer ----------
@@ -396,7 +393,7 @@
     else if (ev.t === 'update') showUpdate(ev);
     else if (ev.t === 'blur') { if (sticky(state)) setState('idle'); }
     else if (ev.t === 'winkey') { if (state === 'start') closeBack(); else setState('start'); }
-    else if (ev.t === 'mic') { island.classList.toggle('has-mic', !!ev.has); island.classList.toggle('mic-off', !!ev.has && !!ev.muted); $('#bMic').hidden = !ev.has; $('#bMic').title = ev.muted ? 'Mikrofon ist stumm – einschalten' : 'Mikrofon stumm schalten'; }
+    else if (ev.t === 'mic') { island.classList.toggle('has-mic', !!ev.has); island.classList.toggle('mic-off', !!ev.has && !!ev.muted); $('#bMic').hidden = !ev.has; $('#tMic').hidden = !ev.has; $('#tMic').setAttribute('aria-pressed', !!ev.muted); $('#bMic').title = ev.muted ? 'Mikrofon ist stumm – einschalten' : 'Mikrofon stumm schalten'; }
     else if (ev.t === 'mixer') renderMixer(ev.list || []);
     else if (ev.t === 'wall') { wallUrl = ev.data || ''; if (glassMode === 'bild') applyGlass(); }
     else if (ev.t === 'notif') { if (state === 'idle' || state === 'vol' || state === 'toast' || state === 'hub') toast([ev.title, ev.body].filter(Boolean).join(' – '), 5000, ev.app); }
