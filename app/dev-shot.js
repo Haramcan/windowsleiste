@@ -56,12 +56,45 @@ module.exports = win => {
         global.inselWinKey(); await wait(900);
         log('Windows-Taste im Vollbild: offen=' + s1 + ' bleibt=' + s2 + ' zweiter Druck=' + await state());
       } catch (e) { log('Windows-Taste: Fehler ' + e.message); }
+      // Zurück ins Spiel: Beim Schließen per Windows-Taste muss die Insel sofort aus dem Bild.
+      try {
+        global.inselFullscreen(true); await wait(1200);
+        global.inselWinKey(); await wait(1500);
+        const open = await state(), focused = win.isFocused();
+        global.inselWinKey(); await wait(250);
+        const gone = win.getBounds().x < -10000;
+        log('Zurück ins Spiel: offen=' + open + ' Fokus=' + focused + ' sofort versteckt=' + gone);
+        global.inselFullscreen(false); await wait(1500);
+      } catch (e) { log('Zurück ins Spiel: Fehler ' + e.message); }
+      // Automatisch ausblenden: weg, kommt mit der Maus am Rand zurück, verschwindet wieder
+      try {
+        const { ipcMain, screen } = require('electron');
+        ipcMain.emit('set-autohide', {}, true); await wait(800);
+        const h1 = win.getBounds().x < -10000;
+        const pos = global.inselPos(), d = screen.getDisplayNearestPoint({ x: pos.cx, y: pos.y }).bounds;
+        await mouse(pos.cx, pos.anchor === 'bottom' ? d.y + d.height - 1 : d.y, false);
+        const h2 = win.getBounds().x < -10000;
+        await mouse(40, 600, false); await wait(1200);
+        const h3 = win.getBounds().x < -10000;
+        log('Automatisch ausblenden: versteckt=' + h1 + ' Rand=' + (h2 ? 'versteckt' : 'sichtbar') + ' weg=' + (h3 ? 'versteckt' : 'sichtbar'));
+        ipcMain.emit('set-autohide', {}, false); await wait(800);
+      } catch (e) { log('Automatisch ausblenden: Fehler ' + e.message); }
       await js(`document.querySelector('#island').dataset.state='idle'`);
     }
     for (const s of ['idle', 'hub', 'music', 'quick', 'look', 'widgets', 'notif', 'settings', 'cal', 'mixer', 'notes', 'vol', 'start']) {
       await win.webContents.executeJavaScript(s === 'start' ? `document.querySelector('[data-start]').click()` : `document.querySelector('#island').dataset.state='${s}'`);
       await wait(s === 'start' ? 6000 : 900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
+    }
+    // Suche im Menü (das Menü ist nach der Bilderreihe offen)
+    for (const q of ['deinstallieren', 'programme hinzufügen', 'editor']) {
+      try {
+        await win.webContents.executeJavaScript(`(() => { const s = document.querySelector('#sSearch'); s.value = ${JSON.stringify(q)}; s.dispatchEvent(new Event('input')); })()`);
+        await wait(3500);
+        if (q === 'deinstallieren') fs.writeFileSync(path.join(out, 'search.png'), (await win.webContents.capturePage()).toPNG());
+        const labels = await win.webContents.executeJavaScript(`[...document.querySelectorAll('#sList .s-sec, #sList .s-row b')].map(b => b.textContent).join(' | ')`);
+        fs.appendFileSync(path.join(out, 'helper.log'), 'suche: ' + q + ': ' + labels + '\n');
+      } catch (e) { fs.appendFileSync(path.join(out, 'helper.log'), 'suche: Fehler ' + e.message + '\n'); }
     }
     // Milchglas-Test: Sieht die Bildschirmaufnahme die Insel selbst? (Soll sie nicht.)
     if (process.env.INSEL_REAL) {

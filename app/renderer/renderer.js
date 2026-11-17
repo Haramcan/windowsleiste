@@ -18,6 +18,7 @@
     if (was === 'mixer' && s !== 'mixer') api.mixer(false);
     $$('.view').forEach(v => { v.inert = v.dataset.view !== s; });
     reportRect();
+    if (s === 'toast' || s === 'vol') api.flash(s === 'vol' ? 1700 : 6500);   // bei "Automatisch ausblenden" kurz zeigen
     if (s !== 'hub' && s !== 'start') { const p = document.getElementById('peek'); if (p) p.classList.remove('on'); }
   }
   // Dem Hauptprozess laufend sagen, wo die Insel im Fenster liegt (auch während sie wächst oder schrumpft).
@@ -276,6 +277,7 @@
   toggle('#tTaskbar', api.setHideTaskbar);
   toggle('#tAuto', api.setAutostart);
   toggle('#tWinKey', api.setWinKey);
+  toggle('#tAutoHide', api.setAutoHide);
   toggle('#tMicKey', api.setMicKey);
   function showScale(v) { $$('[data-scale]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.scale === v)); }
   $$('[data-scale]').forEach(b => b.addEventListener('click', () => { showScale(+b.dataset.scale); api.setScale(+b.dataset.scale); }));
@@ -367,45 +369,116 @@
   }
   $('#bUpdate').addEventListener('click', () => { if (upd.state === 'ready') api.updateInstall(); else api.updateCheck(); });
 
-  // ---------- Startmenü ----------
-  let allApps = [], shown = [], sel = 0, iconUrls = {};
-  const sGrid = $('#sGrid'), sSearch = $('#sSearch');
-  function drawStart() {
-    const q = sSearch.value.trim().toLowerCase();
-    shown = (q ? allApps.filter(a => a.name.toLowerCase().includes(q)).sort((a, b) => a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q)) : allApps).slice(0, 60);
-    sel = 0;
-    sGrid.innerHTML = shown.length ? shown.map((a, i) => '<button class="s-app' + (i === 0 && q ? ' sel' : '') + '" data-si="' + i + '" style="--i:' + Math.min(i, 14) + '" title="' + esc(a.name) + '">' +
-      (iconUrls[a.id] ? '<img src="' + esc(iconUrls[a.id]) + '" alt="">' : '<span class="letter">' + esc(a.name.charAt(0).toUpperCase()) + '</span>') +
-      '<span class="n">' + esc(a.name) + '</span></button>').join('') : '<div class="s-empty">' + (allApps.length ? 'Nichts gefunden.' : 'Programme werden geladen …') + '</div>';
+  // ---------- Startmenü mit Suche ----------
+  let allApps = [], shown = [], iconUrls = {};
+  let settingsList = [], rows = [], rsel = 0, fileRows = [], filePending = false, fileTimer = null, searchSeq = 0;
+  const sGrid = $('#sGrid'), sList = $('#sList'), sSearch = $('#sSearch');
+  const ICON = { gear: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg>', search: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>', web: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>' };
+  api.settingsList().then(l => { settingsList = l || []; });
+  const STOP = new Set(['oder', 'und', 'die', 'der', 'das', 'den', 'dem', 'ein', 'eine', 'einen', 'von', 'mit', 'fur', 'zu', 'im', 'in', 'am', 'an', 'auf', 'wie', 'ich']);
+  const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g, 'ss');
+  const wordsOf = q => norm(q).split(/[\s,]+/).filter(w => w && !STOP.has(w));
+  const hit = (text, ws) => { const t = norm(text); return ws.length > 0 && ws.every(w => t.includes(w)); };
+  const appIcon = a => iconUrls[a.id] ? '<img src="' + esc(iconUrls[a.id]) + '" alt="">' : '<span class="letter">' + esc(a.name.charAt(0).toUpperCase()) + '</span>';
+
+  // Ohne Suchtext: alle Programme als Raster
+  function drawGrid() {
+    shown = allApps.slice(0, 60);
+    sGrid.innerHTML = shown.length ? shown.map((a, i) => '<button class="s-app" data-si="' + i + '" style="--i:' + Math.min(i, 14) + '" title="' + esc(a.name) + '">' +
+      appIcon(a) + '<span class="n">' + esc(a.name) + '</span></button>').join('') : '<div class="s-empty">' + (allApps.length ? 'Keine Programme gefunden.' : 'Programme werden geladen …') + '</div>';
     sGrid.scrollTop = 0;
-    const need = shown.filter(a => !(a.id in iconUrls)).map(a => a.id);
-    if (need.length) api.startIcons(need).then(res => {
-      Object.assign(iconUrls, res);
-      shown.forEach((a, i) => { const b = sGrid.querySelector('[data-si="' + i + '"] .letter'); if (b && iconUrls[a.id]) b.outerHTML = '<img src="' + esc(iconUrls[a.id]) + '" alt="">'; });
-    });
+    loadIcons(shown, () => shown.forEach((a, i) => { const b = sGrid.querySelector('[data-si="' + i + '"] .letter'); if (b && iconUrls[a.id]) b.outerHTML = '<img src="' + esc(iconUrls[a.id]) + '" alt="">'; }));
+  }
+  function loadIcons(apps, done) {
+    const need = apps.filter(a => !(a.id in iconUrls)).map(a => a.id);
+    if (need.length) api.startIcons(need).then(res => { Object.assign(iconUrls, res); done(); });
+  }
+
+  // Mit Suchtext: Liste wie bei der Windows-Suche
+  function rowHtml(r, i) {
+    const pic = r.app ? appIcon(r.app) : r.img ? '<img src="' + esc(r.img) + '" alt="">' : '<span class="ic">' + (r.ic || '') + '</span>';
+    return '<button class="s-row' + (i === rsel ? ' sel' : '') + '" data-ri="' + i + '">' + pic +
+      '<span class="t"><b>' + esc(r.label) + '</b><small>' + esc(r.sub || '') + '</small></span></button>';
+  }
+  function drawList(q, keepLabel) {
+    const ws = wordsOf(q), first = ws[0] || '';
+    const apps = allApps.filter(a => hit(a.name, ws))
+      .sort((a, b) => norm(a.name).indexOf(first) - norm(b.name).indexOf(first)).slice(0, 6)
+      .map(a => ({ label: a.name, sub: 'App', app: a, run: () => { api.startLaunch(a.id); setState('idle'); } }));
+    const sets = settingsList.filter(s => hit(s.name + ' ' + s.sub + ' ' + s.keys, ws)).slice(0, 6)
+      .map(s => ({ label: s.name, sub: s.sub, ic: ICON.gear, run: () => { api.runSetting(s.i); setState('idle'); } }));
+    const more = [
+      { label: '„' + q + '“ in der Windows-Suche', sub: 'Öffnet die Suche von Windows mit diesem Text', ic: ICON.search, run: () => { setState('idle'); api.winSearch(q); } },
+      { label: '„' + q + '“ im Web suchen', sub: 'Öffnet deinen Browser', ic: ICON.web, run: () => { api.webSearch(q); setState('idle'); } }];
+    rows = []; let h = '';
+    const group = (title, items) => {
+      if (!items.length) return;
+      h += '<div class="s-sec">' + title + '</div>';
+      items.forEach(r => { h += rowHtml(r, rows.push(r) - 1); });
+    };
+    rsel = 0;
+    const all = [].concat(apps, sets, fileRows, more);
+    if (keepLabel) { const k = all.findIndex(r => r.label === keepLabel); if (k >= 0) rsel = k; }
+    group('Apps', apps); group('Einstellungen', sets);
+    if (fileRows.length) group('Dateien', fileRows);
+    else if (filePending) h += '<div class="s-sec">Dateien</div><div class="s-wait">Suche …</div>';
+    group('Weitere', more);
+    sList.innerHTML = h;
+    loadIcons(apps.map(r => r.app), () => apps.forEach(r => { const i = rows.indexOf(r); const el = sList.querySelector('[data-ri="' + i + '"] .letter'); if (el && iconUrls[r.app.id]) el.outerHTML = '<img src="' + esc(iconUrls[r.app.id]) + '" alt="">'; }));
+  }
+  function markSel(scroll) {
+    sList.querySelectorAll('.s-row').forEach(b => b.classList.toggle('sel', +b.dataset.ri === rsel));
+    const el = sList.querySelector('.s-row.sel');
+    if (el && scroll) el.scrollIntoView({ block: 'nearest' });
+  }
+  function drawStart() {
+    const q = sSearch.value.trim();
+    sGrid.hidden = !!q; sList.hidden = !q;
+    clearTimeout(fileTimer); fileRows = []; filePending = q.length >= 2;
+    if (!q) return drawGrid();
+    drawList(q);
+    if (!filePending) return;
+    fileTimer = setTimeout(() => {
+      const id = ++searchSeq;
+      api.searchFiles(q).then(items => {
+        if (id !== searchSeq || sSearch.value.trim() !== q) return;
+        filePending = false;
+        fileRows = (items || []).map(f => ({ label: f.name, sub: f.path, img: f.icon, path: f.path, ic: '', run: () => { api.openFile(f.path); setState('idle'); } }));
+        drawList(q, rows[rsel] && rows[rsel].label);
+      });
+    }, 200);
   }
   function openStart() {
-    sSearch.value = ''; drawStart(); $$('[data-power]').forEach(resetPower);
+    sSearch.value = ''; drawStart(); resetPower();
     api.focus(true); setTimeout(() => sSearch.focus(), 60);
     api.startApps().then(list => { allApps = list || []; if (state === 'start') drawStart(); });
   }
   function launch(i) { if (shown[i]) { api.startLaunch(shown[i].id); setState('idle'); } }
   sSearch.addEventListener('input', drawStart);
   sSearch.addEventListener('keydown', e => {
-    if (e.key === 'Enter') launch(sel);
-    else if (e.key === 'Escape') closeBack();
+    const listMode = !!sSearch.value.trim();
+    if (e.key === 'Escape') return closeBack();
+    if (!listMode) return;
+    if (e.key === 'Enter') { if (rows[rsel]) rows[rsel].run(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); rsel = Math.min(rows.length - 1, rsel + 1); markSel(true); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); rsel = Math.max(0, rsel - 1); markSel(true); }
   });
   sGrid.addEventListener('click', e => { const b = e.target.closest('[data-si]'); if (b) launch(+b.dataset.si); });
-  // Ausschalten und Neustart brauchen einen zweiten Klick zur Bestätigung.
-  const powerText = { lock: 'Sperren', restart: 'Neu starten', off: 'Herunterfahren' };
-  function resetPower(b) { b.textContent = powerText[b.dataset.power]; b.removeAttribute('aria-pressed'); }
+  sList.addEventListener('click', e => { const b = e.target.closest('[data-ri]'); if (b && rows[+b.dataset.ri]) rows[+b.dataset.ri].run(); });
+  sList.addEventListener('mousemove', e => { const b = e.target.closest('[data-ri]'); if (b && +b.dataset.ri !== rsel) { rsel = +b.dataset.ri; markSel(false); } });
+  sList.addEventListener('contextmenu', e => { const b = e.target.closest('[data-ri]'); const r = b && rows[+b.dataset.ri]; if (r && r.path) { e.preventDefault(); api.showFile(r.path); } });
+
+  // Ein/Aus: Neu starten und Herunterfahren brauchen einen zweiten Klick.
+  const powerText = { restart: 'Nochmal klicken: Neu starten', off: 'Nochmal klicken: Herunterfahren' };
+  let powerT = null;
+  function resetPower() { $$('[data-power]').forEach(b => b.removeAttribute('aria-pressed')); $('#sHint').classList.remove('on'); }
   $$('[data-power]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.power;
     if (k === 'lock') { api.power('lock'); return setState('idle'); }
     if (b.getAttribute('aria-pressed') === 'true') return api.power(k);
-    $$('[data-power]').forEach(resetPower);
-    b.setAttribute('aria-pressed', 'true'); b.textContent = 'Wirklich? Nochmal klicken';
-    setTimeout(() => resetPower(b), 4000);
+    resetPower();
+    b.setAttribute('aria-pressed', 'true'); $('#sHint').textContent = powerText[k]; $('#sHint').classList.add('on');
+    clearTimeout(powerT); powerT = setTimeout(resetPower, 4000);
   }));
   toggle('#tLight', api.setTheme);
   $('#bIcons').addEventListener('click', () => api.deskIcons());
@@ -458,7 +531,7 @@
     else if (ev.t === 'tray') renderTray(ev);
     else if (ev.t === 'notifAccess') { if (!ev.ok) $('#nHint').textContent = 'Windows gibt die Mitteilungen noch nicht frei. Erlaube den Zugriff unter Einstellungen → Datenschutz und Sicherheit → Benachrichtigungen.'; }
     else if (ev.t === 'theme') $('#tLight').setAttribute('aria-pressed', !!ev.light);
-    else if (ev.t === 'visible') { hover = false; drag = null; island.classList.toggle('dragging', false); if (!ev.on && state !== 'idle') setState('idle');
+    else if (ev.t === 'visible') { island.classList.toggle('asleep', !ev.on); hover = false; drag = null; island.classList.toggle('dragging', false); if (!ev.on && state !== 'idle') setState('idle');
        if (glassOn) { if (ev.on) startGlass(); else stopGlass(); } }
   });
 
@@ -468,7 +541,7 @@
     $('#tFrames').setAttribute('aria-pressed', !!s.frames);
     $('#tHideFs').setAttribute('aria-pressed', s.hideFullscreen !== false);
     locked = !!s.locked; $('#tLock').setAttribute('aria-pressed', locked);
-    $('#tWinKey').setAttribute('aria-pressed', !!s.winKey);
+    $('#tWinKey').setAttribute('aria-pressed', !!s.winKey); $('#tAutoHide').setAttribute('aria-pressed', !!s.autoHide);
     $('#tMicKey').setAttribute('aria-pressed', s.micKey !== false); showScale(s.scale || 1); $('#note').value = s.note || '';
     island.classList.toggle('clear', !!s.clear); $('#tClear').setAttribute('aria-pressed', !!s.clear);
     showNotifyState(s.notify);

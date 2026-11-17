@@ -16,7 +16,8 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Widgets** auf dem Desktop mit Milchglas: Uhr, Kalender, System, Musik, Notiz
 - **Kalender** beim Klick aufs Datum, **Fenster-Vorschau** beim Überfahren eines Programms
 - **Größe** der Insel einstellbar; Mikrofon stumm per `Strg+Umschalt+F11`
-- **Eigenes Startmenü** in der Insel: alle Programme mit Suche, dazu Sperren, Neu starten, Herunterfahren
+- **Eigenes Startmenü** in der Insel: Suche nach Programmen, Windows-Einstellungen und Dateien, dazu Sperren, Neu starten, Herunterfahren
+- **Automatisch ausblenden:** Die Insel verschwindet und kommt zurück, wenn die Maus an ihren Rand fährt
 - **Frei verschieben** oder Position sperren; wahlweise komplett durchsichtig
 - Versteckt sich bei Spielen und Videos im Vollbild; kurz mit der Maus an den Bildschirmrand, und sie kommt zurück
 - **Lautstärke pro Programm**, Mikrofon stummschalten mit Anzeige in der Insel

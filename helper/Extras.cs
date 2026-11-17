@@ -62,7 +62,8 @@ internal static class WinKey
                                 // und öffnet sein eigenes Startmenü nicht.
                                 Native.keybd_event(0xFF, 0, 0, UIntPtr.Zero);
                                 Native.keybd_event(0xFF, 0, 2, UIntPtr.Zero);
-                                emit?.Invoke(new { t = "winkey" });
+                                var em = emit;
+                                if (em != null) ThreadPool.QueueUserWorkItem(_ => em(new { t = "winkey" }));
                             }
                             down = false;
                         }

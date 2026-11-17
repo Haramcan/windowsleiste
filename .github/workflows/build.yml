@@ -63,6 +63,11 @@ jobs:
           grep -q '^klick: normal: vorher=idle hover=hub klick=quick' shots/helper.log
           grep -q '^klick: nach Vollbild: vorher=idle hover=hub klick=quick' shots/helper.log
           grep -q '^klick: Windows-Taste im Vollbild: offen=start bleibt=start zweiter Druck=idle' shots/helper.log
+          grep '^suche' shots/helper.log || true
+          grep -q '^klick: Zurück ins Spiel: offen=start .*sofort versteckt=true' shots/helper.log
+          grep -q '^klick: Automatisch ausblenden: versteckt=true Rand=sichtbar weg=versteckt' shots/helper.log
+          grep -q '^suche: deinstallieren: .*Installierte Apps' shots/helper.log
+          grep -q '^suche: programme hinzufügen: .*Installierte Apps' shots/helper.log
           grep -q '^glas: Standard: 0 von' shots/helper.log
           ls shots/idle.png shots/hub.png shots/music.png
           grep -q "helper: windows" shots/helper.log

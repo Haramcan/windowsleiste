@@ -16,7 +16,7 @@ const Z = () => (SCALES.includes(cfg.scale) ? cfg.scale : 1);
 const W = () => Math.round(WIN_W * Z()), H = () => Math.round(WIN_H * Z());
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, scale: 1, micKey: true, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, autoHide: false, scale: 1, micKey: true, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
 let lastTray = { t: 'tray', ok: false, icons: [] }, lastMic = { t: 'mic', has: false, muted: false };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
@@ -150,11 +150,12 @@ function startHelper() {
   helper.on('exit', () => { helper = null; if (!quitting) setTimeout(startHelper, 2000); });
   readline.createInterface({ input: helper.stdout }).on('line', line => {
     let ev; try { ev = JSON.parse(line); } catch (_) { return; }
-    if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + '\n'); } catch (_) {} }
+    if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + (ev.err ? ' ' + ev.err : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
     else if (ev.t === 'winkey') onWinKey();
+    else if (ev.t === 'search') { if (ev.err) logLine('Dateisuche: ' + ev.err); const w = searchWait.get(ev.id); if (w) { searchWait.delete(ev.id); w(ev.items || []); } }
     else if (ev.t === 'winthumb') { const w = thumbWait.get(ev.h); if (w) { thumbWait.delete(ev.h); w(ev.data || ''); } }
     else if (ev.t === 'media' || ev.t === 'thumb') { if (ev.t === 'media') lastMedia = ev; else lastThumb = ev; send('ev', ev); toWidget('music', ev); }
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
@@ -162,7 +163,7 @@ function startHelper() {
     else if (ev.t === 'fullscreen') {
       logLine('Vollbild ' + (ev.on ? 'an' : 'aus') + (ev.why ? ' (' + ev.why + ')' : ''));
       fullscreenNow = !!ev.on;
-      if (!process.env.INSEL_SHOT) setHidden(fullscreenNow && cfg.hideFullscreen !== false);   // im Probelauf steuert der Test das selbst
+      if (!process.env.INSEL_SHOT) updateHidden();   // im Probelauf steuert der Test das selbst
     }
     else if (ev.t === 'notif') {
       const name = ev.app || 'Unbekannt';
@@ -185,32 +186,50 @@ function onWinKey() {
 }
 if (process.env.INSEL_SHOT) global.inselWinKey = onWinKey;
 
-// Bei Vollbild verstecken und danach wieder zeigen.
-function setHidden(on) {
+// Verstecken bei Vollbild oder wenn "Automatisch ausblenden" an ist; die Maus am Rand holt die Insel zurück.
+const fullHide = () => fullscreenNow && cfg.hideFullscreen !== false;
+function updateHidden() { setHidden(fullHide() || !!cfg.autoHide); }
+function setHidden(on, force) {
+  if (on === hiddenForFullscreen && !force) return;   // nichts geändert: eine geöffnete Insel nicht wegnehmen
   hiddenForFullscreen = on;
   peeking = false; edgeSince = 0; drag = null;
   if (win && !win.isDestroyed()) applyPos();   // schiebt die Insel aus dem Bild oder zurück an ihren Platz
   send('ev', { t: 'visible', on: !on });
 }
-if (process.env.INSEL_SHOT) global.inselSetHidden = setHidden;
+if (process.env.INSEL_SHOT) {
+  global.inselSetHidden = setHidden;
+  global.inselFullscreen = on => { fullscreenNow = on; updateHidden(); };
+  global.inselPos = () => cfg.pos;
+}
 
 // Vollbild (Spiel, Video): Die Insel ist weg, kommt aber zurück, wenn die Maus kurz am Bildschirmrand bei ihr anstößt.
-let peeking = false, edgeSince = 0, awaySince = 0;
+let peeking = false, edgeSince = 0, awaySince = 0, flashUntil = 0;
+function peek() { peeking = true; awaySince = 0; applyPos(); send('ev', { t: 'visible', on: true }); }
+// Kurz zeigen (Lautstärke, Mitteilung), wenn die Insel nur wegen "Automatisch ausblenden" weg ist – nie über einem Spiel.
+ipcMain.on('flash', (_e, ms) => {
+  if (!hiddenForFullscreen || fullHide()) return;
+  flashUntil = Date.now() + Math.max(0, Math.min(8000, +ms || 0));
+  if (!peeking) peek();
+});
 setInterval(() => {
   if (!win || win.isDestroyed() || !hiddenForFullscreen || !cfg.pos) return;
   const c = screen.getCursorScreenPoint(), now = Date.now();
   const d = screen.getDisplayNearestPoint({ x: cfg.pos.cx, y: cfg.pos.y }).bounds;
   if (!peeking) {
-    const atEdge = cfg.pos.anchor === 'bottom' ? c.y >= d.y + d.height - 2 : c.y <= d.y + 1;
-    const near = Math.abs(c.x - cfg.pos.cx) < 220 && c.x >= d.x && c.x < d.x + d.width;
-    if (atEdge && near) {
+    const auto = !fullHide(), z = Z(), half = 175 * z + 16, bottom = cfg.pos.anchor === 'bottom';
+    const atEdge = bottom ? c.y >= d.y + d.height - 2 : c.y <= d.y + 1;
+    const near = Math.abs(c.x - cfg.pos.cx) < (auto ? half : 220) && c.x >= d.x && c.x < d.x + d.width;
+    // bei "Automatisch ausblenden" reicht es auch, kurz dort zu verweilen, wo die Insel sonst sitzt
+    const inZone = auto && Math.abs(c.x - cfg.pos.cx) < half - 6 && (bottom ? c.y >= cfg.pos.y - 56 * z : c.y <= cfg.pos.y + 56 * z) && c.y >= d.y && c.y < d.y + d.height;
+    const need = atEdge && near ? (auto ? 120 : 300) : inZone ? 450 : -1;
+    if (need >= 0) {
       if (!edgeSince) edgeSince = now;
-      else if (now - edgeSince > 300) { peeking = true; awaySince = 0; applyPos(); send('ev', { t: 'visible', on: true }); }
+      else if (now - edgeSince > need) peek();
     } else edgeSince = 0;
   } else {
     const b = win.getBounds(), r = islandRect;
     const inside = r && c.x >= b.x + r.left - 40 && c.x <= b.x + r.left + r.width + 40 && c.y >= b.y + r.top - 40 && c.y <= b.y + r.top + r.height + 40;
-    if (inside || win.isFocused()) awaySince = 0;
+    if (inside || win.isFocused() || now < flashUntil) awaySince = 0;
     else if (!awaySince) awaySince = now;
     else if (now - awaySince > 1200) { peeking = false; edgeSince = 0; applyPos(); send('ev', { t: 'visible', on: false }); }
   }
@@ -305,9 +324,9 @@ function createWindow() {
 }
 
 ipcMain.handle('ready', () => {
-  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', lastMic); send('ev', updateState); });
+  setImmediate(() => { applyPos(); pushApps(); send('ev', lastTray); send('ev', lastMic); send('ev', updateState); send('ev', { t: 'visible', on: !(hiddenForFullscreen && !peeking) }); });
   return { hideTaskbar: !!cfg.hideTaskbar, autostart: app.getLoginItemSettings().openAtLogin, hasHelper: !!helper, margin: M,
-           glass: cfg.glass, wall: wallpaperUrl(), scale: Z(), micKey: cfg.micKey !== false, locked: !!cfg.locked, clear: !!cfg.clear, hideFullscreen: cfg.hideFullscreen !== false, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
+           glass: cfg.glass, wall: wallpaperUrl(), autoHide: !!cfg.autoHide, scale: Z(), micKey: cfg.micKey !== false, locked: !!cfg.locked, clear: !!cfg.clear, hideFullscreen: cfg.hideFullscreen !== false, winKey: !!cfg.winKey, note: String(cfg.note || ''), frames: !!cfg.frames, notify: notifyState(), widgets: widgetState() };
 });
 
 // Milchglas: Die Oberfläche bekommt ein kleines Live-Bild des Bildschirms und zeichnet es unscharf hinter die Insel.
@@ -342,7 +361,94 @@ setInterval(() => {
   const before = wallCache.url, now = wallpaperUrl();
   if (now !== before) { send('ev', { t: 'wall', data: now }); Object.keys(widgetWins).forEach(widgetGeo); }
 }, 4000);
-ipcMain.on('set-hide-fullscreen', (_e, b) => { cfg.hideFullscreen = !!b; saveCfg(); setHidden(fullscreenNow && cfg.hideFullscreen); });
+ipcMain.on('set-hide-fullscreen', (_e, b) => { cfg.hideFullscreen = !!b; saveCfg(); updateHidden(); });
+ipcMain.on('set-autohide', (_e, b) => { cfg.autoHide = !!b; saveCfg(); updateHidden(); });
+
+// ---------- Suche im Menü: Einstellungen von Windows, Dateien, Windows-Suche, Web ----------
+const SETTINGS = [
+  ["Installierte Apps", "Programme hinzufügen oder entfernen", "ms-settings:appsfeatures", "programme hinzufügen entfernen deinstallieren installieren software apps features"],
+  ["Programme und Features", "Systemsteuerung · Programm deinstallieren", "control.exe /name Microsoft.ProgramsAndFeatures", "programme deinstallieren entfernen hinzufügen software systemsteuerung"],
+  ["Standard-Apps", "Womit Dateien und Links geöffnet werden", "ms-settings:defaultapps", "standardprogramme standard browser öffnen mit dateityp"],
+  ["Autostart", "Programme beim Windows-Start", "ms-settings:startupapps", "autostart start programme hochfahren"],
+  ["Anzeige", "Auflösung, Skalierung, Hz", "ms-settings:display", "bildschirm monitor auflösung skalierung hz helligkeit anzeige"],
+  ["Nachtmodus", "Blaulicht reduzieren", "ms-settings:nightlight", "nachtlicht nachtmodus blaulicht"],
+  ["Grafik", "Grafikkarte pro Programm", "ms-settings:display-advancedgraphics", "grafik gpu grafikkarte leistung"],
+  ["Sound", "Lautsprecher, Kopfhörer, Mikrofon", "ms-settings:sound", "ton audio lautsprecher mikrofon ausgabe eingabe kopfhörer"],
+  ["Lautstärkemixer", "Lautstärke pro App", "ms-settings:apps-volume", "lautstärke mixer"],
+  ["Sound (klassisch)", "Wiedergabe- und Aufnahmegeräte", "mmsys.cpl", "sound wiedergabegeräte aufnahmegeräte systemsteuerung"],
+  ["Bluetooth & Geräte", "Kopfhörer, Controller koppeln", "ms-settings:bluetooth", "bluetooth geräte koppeln kopfhörer controller"],
+  ["Maus", "Zeigergeschwindigkeit, Tasten", "ms-settings:mousetouchpad", "maus zeiger geschwindigkeit mausrad"],
+  ["Drucker & Scanner", "Einstellungen", "ms-settings:printers", "drucker scanner drucken"],
+  ["WLAN", "Netzwerk & Internet", "ms-settings:network-wifi", "wlan wifi internet netzwerk drahtlos"],
+  ["Netzwerk & Internet", "Einstellungen", "ms-settings:network", "netzwerk internet lan ethernet verbindung"],
+  ["Netzwerkverbindungen", "Adapter verwalten", "ncpa.cpl", "netzwerkadapter adapter verbindungen ip dns"],
+  ["VPN", "Netzwerk & Internet", "ms-settings:network-vpn", "vpn"],
+  ["Hintergrund", "Desktop-Hintergrund ändern", "ms-settings:personalization-background", "hintergrund wallpaper desktop bild"],
+  ["Farben", "Hell, Dunkel, Akzentfarbe", "ms-settings:colors", "farben dunkel hell modus akzent"],
+  ["Designs", "Designs und Desktopsymbole", "ms-settings:themes", "design themes symbole desktopsymbole"],
+  ["Sperrbildschirm", "Personalisierung", "ms-settings:lockscreen", "sperrbildschirm"],
+  ["Taskleiste (Windows)", "Personalisierung", "ms-settings:taskbar", "taskleiste"],
+  ["Benachrichtigungen", "Nicht stören", "ms-settings:notifications", "benachrichtigungen mitteilungen nicht stören fokus"],
+  ["Energie", "Energiesparen, Bildschirm aus", "ms-settings:powersleep", "energie strom akku energiesparen standby ruhezustand bildschirm aus"],
+  ["Energieoptionen", "Energiesparplan wählen", "powercfg.cpl", "energiesparplan hochleistung energieoptionen"],
+  ["Speicher", "Speicherplatz freigeben", "ms-settings:storagesense", "speicher festplatte platz bereinigen speicheroptimierung"],
+  ["Windows Update", "Nach Updates suchen", "ms-settings:windowsupdate", "update aktualisieren windows update"],
+  ["Datum & Uhrzeit", "Zeit und Sprache", "ms-settings:dateandtime", "datum uhrzeit zeit zeitzone"],
+  ["Sprache & Region", "Zeit und Sprache", "ms-settings:regionlanguage", "sprache region tastatur layout"],
+  ["Eingabe", "Tastatur, Rechtschreibung", "ms-settings:typing", "tastatur eingabe rechtschreibung"],
+  ["Zwischenablage", "Verlauf der Zwischenablage", "ms-settings:clipboard", "zwischenablage kopieren verlauf"],
+  ["Multitasking", "Fenster andocken", "ms-settings:multitasking", "fenster andocken snap multitasking"],
+  ["Konten", "Deine Infos", "ms-settings:yourinfo", "konto benutzer profilbild"],
+  ["Anmeldeoptionen", "Passwort, PIN", "ms-settings:signinoptions", "passwort pin anmelden kennwort"],
+  ["Datenschutz & Sicherheit", "Berechtigungen", "ms-settings:privacy", "datenschutz berechtigungen"],
+  ["Mikrofon-Zugriff", "Welche Apps das Mikrofon nutzen dürfen", "ms-settings:privacy-microphone", "mikrofon berechtigung zugriff"],
+  ["Kamera-Zugriff", "Welche Apps die Kamera nutzen dürfen", "ms-settings:privacy-webcam", "kamera webcam berechtigung zugriff"],
+  ["Windows-Sicherheit", "Virenschutz, Firewall", "windowsdefender:", "virenschutz defender sicherheit firewall viren"],
+  ["Spielmodus", "Gaming", "ms-settings:gaming-gamemode", "spielmodus gaming spiele"],
+  ["Xbox Game Bar", "Aufnahmen, Tastenkürzel", "ms-settings:gaming-gamebar", "game bar aufnahme gaming xbox"],
+  ["Info", "PC-Name, Windows-Version", "ms-settings:about", "info system pc name version spezifikationen"],
+  ["Wiederherstellung", "PC zurücksetzen", "ms-settings:recovery", "zurücksetzen wiederherstellung neu installieren"],
+  ["Optionale Features", "Einstellungen", "ms-settings:optionalfeatures", "features optional"],
+  ["Barrierefreiheit", "Lupe, Kontrast, Text", "ms-settings:easeofaccess", "barrierefreiheit lupe kontrast"],
+  ["Für Entwickler", "Einstellungen", "ms-settings:developers", "entwickler"],
+  ["Systemsteuerung", "Klassische Einstellungen", "control.exe", "systemsteuerung control panel"],
+  ["Task-Manager", "Laufende Programme und Prozesse", "taskmgr.exe", "task manager prozesse beenden"],
+  ["Geräte-Manager", "Treiber und Hardware", "devmgmt.msc", "geräte manager treiber hardware"],
+  ["Datenträgerverwaltung", "Partitionen und Laufwerke", "diskmgmt.msc", "datenträger festplatte partition laufwerk"],
+  ["Dienste", "Windows-Dienste", "services.msc", "dienste services"],
+  ["Ereignisanzeige", "Fehlerprotokolle", "eventvwr.msc", "ereignisanzeige fehler protokoll log"],
+  ["Erweiterte Systemeinstellungen", "Umgebungsvariablen, Leistung", "SystemPropertiesAdvanced.exe", "umgebungsvariablen leistung auslagerungsdatei system eigenschaften"],
+  ["Registrierungs-Editor", "Registry", "regedit.exe", "registry regedit registrierung"],
+  ["Papierkorb", "Gelöschte Dateien", "explorer.exe shell:RecycleBinFolder", "papierkorb gelöscht"],
+  ["Downloads", "Ordner", "explorer.exe shell:Downloads", "downloads heruntergeladen"],
+  ["Firewall", "Windows Defender Firewall", "firewall.cpl", "firewall"]
+];
+ipcMain.handle('settings-list', () => SETTINGS.map(([name, sub, , keys], i) => ({ i, name, sub, keys })));
+ipcMain.on('run-setting', (_e, i) => {
+  const s = SETTINGS[i]; if (!s) return;
+  const target = s[2];
+  if (/^(ms-settings|windowsdefender):/.test(target)) { shell.openExternal(target).catch(() => {}); return; }
+  try { spawn('cmd.exe', ['/d', '/s', '/c', 'start "" ' + target], { windowsVerbatimArguments: true, windowsHide: true, detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+});
+const searchWait = new Map(), fileResults = new Set();
+let searchSeq = 0;
+ipcMain.handle('search-files', (_e, q) => new Promise(resolve => {
+  q = String(q || '').slice(0, 100);
+  if (!helper || q.trim().length < 2) return resolve([]);
+  const id = ++searchSeq;
+  const t = setTimeout(() => { searchWait.delete(id); resolve([]); }, 3000);
+  searchWait.set(id, async items => {
+    clearTimeout(t);
+    const out = [];
+    for (const it of items.slice(0, 10)) { fileResults.add(it.path); out.push({ name: it.name, path: it.path, folder: !!it.folder, icon: await fileIcon(it.path) }); }
+    resolve(out);
+  });
+  sendHelper({ c: 'search', id, q });
+}));
+ipcMain.on('open-file', (_e, p) => { if (fileResults.has(p)) shell.openPath(p); });
+ipcMain.on('show-file', (_e, p) => { if (fileResults.has(p)) shell.showItemInFolder(p); });
+ipcMain.on('win-search', (_e, q) => sendHelper({ c: 'winsearch', q: String(q || '').slice(0, 200) }));
+ipcMain.on('web-search', (_e, q) => { shell.openExternal('https://www.google.com/search?q=' + encodeURIComponent(String(q || '').slice(0, 200))).catch(() => {}); });
 ipcMain.on('set-scale', (_e, v) => {
   if (!SCALES.includes(v)) return;
   cfg.scale = v; saveCfg(); win.webContents.setZoomFactor(v); applyPos();
@@ -432,16 +538,25 @@ ipcMain.on('power', (_e, kind) => {
   else if (kind === 'off') { cleanup(); run('shutdown.exe', ['/s', '/t', '0']); }
 });
 // Für die Suche braucht die Insel kurz die Tastatur; sonst nimmt sie anderen Fenstern nie den Fokus weg.
+let returnHide = false;
 ipcMain.on('focus', (_e, b, restore) => {
   if (!win || win.isDestroyed()) return;
   if (b) {
+    returnHide = fullHide();   // Menü wurde über einem Spiel oder Video geöffnet
     win.setFocusable(true); win.setIgnoreMouseEvents(false); win.focus();
     try { sendHelper({ c: 'fg', h: Number(win.getNativeWindowHandle().readBigUInt64LE(0)) }); } catch (_) {}
   }
-  else {
-    win.blur(); win.setFocusable(false);
-    if (restore) sendHelper({ c: 'back' });   // zurück ins Spiel bzw. ins vorherige Fenster
+  else if (restore) {
+    // erst das Spiel bzw. vorherige Fenster nach vorn holen, dann die Insel abgeben (ohne Umweg über ein anderes Fenster)
+    sendHelper({ c: 'back' });
+    setTimeout(() => { if (!win.isDestroyed()) win.setFocusable(false); }, 60);
+    if (returnHide) {
+      returnHide = false;
+      setHidden(true, true);   // sofort aus dem Bild, nicht erst nach der Vollbild-Erkennung
+      setTimeout(() => { if (!fullscreenNow) updateHidden(); }, 2500);   // Spiel inzwischen beendet? Dann wieder zeigen
+    }
   }
+  else { returnHide = false; win.blur(); win.setFocusable(false); }
 });
 ipcMain.on('set-frames', (_e, b) => { cfg.frames = !!b; saveCfg(); sendHelper({ c: 'frames', on: cfg.frames }); });
 ipcMain.on('set-theme', (_e, light) => sendHelper({ c: 'theme', light: !!light }));
@@ -574,6 +689,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
     loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates(); applyMicKey();
+    if (cfg.autoHide) setHidden(true);
     // Notausgang: Strg+Umschalt+F12 beendet die Insel immer und holt die alte Taskleiste zurück.
     try { globalShortcut.register('Control+Shift+F12', () => { cleanup(); setTimeout(() => app.exit(0), 900); }); } catch (_) {}
     for (const k of Object.keys(WIDGETS)) if (cfg.widgets[k].on) openWidget(k);

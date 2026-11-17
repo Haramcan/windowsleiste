@@ -83,13 +83,15 @@ internal static class Program
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
             case "winkey": WinKey.Enabled = r.GetProperty("on").GetBoolean(); break;
             case "back": WindowList.Back(); break;
+            case "search": FileSearch.Run(r.GetProperty("id").GetInt64(), r.GetProperty("q").GetString() ?? "", Emit); break;
+            case "winsearch": WinSearch.Open(r.GetProperty("q").GetString() ?? ""); break;
             case "close":   // Fenster eines Programms schließen (wie das X im Fenster)
                 foreach (var e in r.GetProperty("h").EnumerateArray()) Native.PostMessage(new IntPtr(e.GetInt64()), 0x10 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
                 break;
             case "fg":   // der Insel die Tastatur geben (für die Suche im Menü)
                 {
                     var h = new IntPtr(r.GetProperty("h").GetInt64());
-                    Native.keybd_event(0x12, 0, 0, UIntPtr.Zero); Native.SetForegroundWindow(h); Native.keybd_event(0x12, 0, 2, UIntPtr.Zero);
+                    Native.keybd_event(0xFF, 0, 0, UIntPtr.Zero); Native.SetForegroundWindow(h); Native.keybd_event(0xFF, 0, 2, UIntPtr.Zero);
                 }
                 break;
             case "snip":   // Bildschirmausschnitt: Win+Umschalt+S
@@ -122,7 +124,7 @@ internal static class Program
                 bool fullNow = fullCount >= 2;
                 if (fullNow != lastFull) { lastFull = fullNow; Emit(new { t = "fullscreen", on = fullNow, why = WindowList.FullscreenWhy }); }
 
-                if (Volume.Get(out float level, out bool muted))
+                if ((!lastFull || n % 4 == 0) && Volume.Get(out float level, out bool muted))
                 {
                     var v = $"{Math.Round(level, 2)}|{muted}";
                     if (v != lastVolume) { lastVolume = v; Emit(new { t = "volume", level = Math.Round(level, 2), muted }); }
@@ -130,8 +132,9 @@ internal static class Program
 
                 Taskbar.KeepHidden();
                 Frames.Apply(list.Select(x => new IntPtr(x.h)));
-                if (n % 2 == 0) Media.Poll(Emit).GetAwaiter().GetResult();
-                if (n % 3 == 0) Notifications.Poll(Emit).GetAwaiter().GetResult();
+                if (n % (lastFull ? 4 : 2) == 0) Media.Poll(Emit).GetAwaiter().GetResult();
+                if (n % (lastFull ? 8 : 3) == 0) Notifications.Poll(Emit).GetAwaiter().GetResult();
+                if (!lastFull || n % 4 == 0)
                 {
                     bool hasMic = Audio.MicState(out bool micMuted);
                     var mic = hasMic + "|" + micMuted;
@@ -521,9 +524,9 @@ internal static class WindowList
         var h = lastActive;
         if (h == IntPtr.Zero || !Native.IsWindow(h)) return;
         if (Native.IsIconic(h)) Native.ShowWindow(h, 9 /* SW_RESTORE */);
-        Native.keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        Native.keybd_event(0xFF, 0, 0, UIntPtr.Zero);
         Native.SetForegroundWindow(h);
-        Native.keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        Native.keybd_event(0xFF, 0, 2, UIntPtr.Zero);
     }
 
     // Wie in der Taskleiste: Klick holt das Fenster nach vorn, Klick auf das aktive Fenster minimiert es.
@@ -533,9 +536,9 @@ internal static class WindowList
         if (Native.GetForegroundWindow() == h && !Native.IsIconic(h)) { Native.ShowWindow(h, 6 /* SW_MINIMIZE */); return; }
         if (Native.IsIconic(h)) Native.ShowWindow(h, 9 /* SW_RESTORE */);
         // Windows erlaubt den Wechsel nur nach einer Eingabe; ein kurzer Alt-Tastendruck genügt dafür.
-        Native.keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        Native.keybd_event(0xFF, 0, 0, UIntPtr.Zero);
         Native.SetForegroundWindow(h);
-        Native.keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        Native.keybd_event(0xFF, 0, 2, UIntPtr.Zero);
     }
 }
 
