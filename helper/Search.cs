@@ -31,7 +31,7 @@ internal static class FileSearch
                         string name = r.IsDBNull(0) ? "" : Convert.ToString(r.GetValue(0)) ?? "";
                         string path = r.IsDBNull(1) ? "" : Convert.ToString(r.GetValue(1)) ?? "";
                         string type = r.IsDBNull(2) ? "" : Convert.ToString(r.GetValue(2)) ?? "";
-                        if (path.Length > 0) items.Add(new { name = name.Length > 0 ? name : Path.GetFileName(path), path, folder = type == "Directory" });
+                        if (path.Length > 0) items.Add(new { name = name.Length > 0 ? name : System.IO.Path.GetFileName(path), path, folder = type == "Directory" });
                     }
                 }
             }
