@@ -187,12 +187,27 @@
       if (e.target.closest('[data-start]')) return setState(state === 'start' ? 'hub' : 'start');
       if (e.target.closest('[data-add]')) { setState('idle'); return api.pinAdd(); }
       const b = e.target.closest('[data-kind]');
-      if (b) { api.appClick(b.dataset.kind, +b.dataset.i); if (state === 'start') setState('idle'); }
+      if (!b) return;
+      if (e.shiftKey) api.appNew(b.dataset.kind, +b.dataset.i);   // Umschalt+Klick: neues Fenster, wie bei Windows
+      else api.appClick(b.dataset.kind, +b.dataset.i);
+      if (state === 'start') setState('idle');
+    });
+    // Mittlere Maustaste: neues Fenster
+    $(sel).addEventListener('auxclick', e => {
+      const b = e.button === 1 && e.target.closest('[data-kind]');
+      if (b) { e.preventDefault(); api.appNew(b.dataset.kind, +b.dataset.i); }
     });
     $(sel).addEventListener('contextmenu', e => {
+      if (e.target.closest('[data-start]')) { e.preventDefault(); return api.startMenu(); }
       const b = e.target.closest('[data-kind]');
       if (b) { e.preventDefault(); api.appMenu(b.dataset.kind, +b.dataset.i); }
     });
+  });
+
+  // Rechtsklick auf eine freie Stelle der Insel: Task-Manager, Desktop, Einstellungen …
+  island.addEventListener('contextmenu', e => {
+    if (e.defaultPrevented || e.target.closest('input, textarea, .v-start, .v-notes')) return;
+    e.preventDefault(); api.islandMenu();
   });
 
   // ---------- Symbole aus dem Infobereich ----------
@@ -515,7 +530,9 @@
       if (lastVol !== null && key !== lastVol) volOsd(v, ev.muted);
       lastVol = key;
     }
-    else if (ev.t === 'toast') toast(ev.m);
+    else if (ev.t === 'toast') toast(ev.m, 4500);
+    else if (ev.t === 'go') { if (['start', 'settings'].includes(ev.s)) setState(ev.s); }
+    else if (ev.t === 'cfg') { locked = !!ev.locked; $('#tLock').setAttribute('aria-pressed', locked); $('#tAutoHide').setAttribute('aria-pressed', !!ev.autoHide); }
     else if (ev.t === 'menu') { menuOpen = !!ev.on; if (!menuOpen && !island.matches(':hover')) { hover = false; api.ignore(true); scheduleClose(); } }
     else if (ev.t === 'update') showUpdate(ev);
     else if (ev.t === 'blur') { if (sticky(state)) setState('idle'); }

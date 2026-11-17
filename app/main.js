@@ -595,20 +595,114 @@ ipcMain.on('helper', (_e, cmd) => {
 ipcMain.on('app-click', (_e, { kind, i }) => {
   const a = (kind === 'pin' ? lastApps.pins : lastApps.others)[i];
   if (!a) return;
-  if (a.wins.length) sendHelper({ c: 'activate', h: a.wins[0] });
+  if (a.wins.length) {
+    let h = a.wins[0];
+    if (a.wins.length > 1) {
+      const act = a.wins.findIndex(x => (lastWindows.find(w => w.h === x) || {}).active);
+      if (act >= 0) h = a.wins[(act + 1) % a.wins.length];
+    }
+    sendHelper({ c: 'activate', h });
+  }
   else if (kind === 'pin' && cfg.pins[i]) shell.openPath(cfg.pins[i].path).then(err => { if (err) send('ev', { t: 'toast', m: 'Konnte nicht gestartet werden: ' + cfg.pins[i].name }); });
 });
-ipcMain.on('app-menu', (_e, { kind, i }) => {
-  const items = [];
-  if (kind === 'pin' && cfg.pins[i]) items.push({ label: 'Von der Insel lösen', click: () => { cfg.pins.splice(i, 1); saveCfg(); pushApps(); } });
-  if (kind === 'other' && lastApps.others[i]) { const exe = lastApps.others[i].exe; items.push({ label: 'An die Insel anheften', click: () => addPins([exe]) }); }
+// ---------- Rechtsklick-Menüs wie in der Taskleiste von Windows ----------
+function startTarget(target) {   // nur feste Ziele aus diesem Programm, keine Eingaben von außen
+  if (/^ms-settings:/.test(target)) { shell.openExternal(target).catch(() => {}); return; }
+  try { spawn('cmd.exe', ['/d', '/s', '/c', 'start "" ' + target], { windowsVerbatimArguments: true, windowsHide: true, detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+}
+function startAdmin(file) {
+  try { spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath '" + String(file).replace(/'/g, "''") + "' -Verb RunAs"], { windowsHide: true, detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+}
+const combo = (...k) => sendHelper({ c: 'combo', k });   // 0x5B = Windows-Taste
+function appFile(kind, i) {   // Datei, mit der sich das Programm neu starten lässt
+  if (kind === 'pin') return cfg.pins[i] ? (cfg.pins[i].target || cfg.pins[i].path) : '';
+  return lastApps.others[i] ? lastApps.others[i].exe : '';
+}
+function launchNew(kind, i) {
+  if (kind === 'pin' && cfg.pins[i]) { shell.openPath(cfg.pins[i].path); return; }
+  const f = appFile(kind, i);
+  if (f) try { spawn(f, [], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+}
+function appMenuTemplate(kind, i) {
   const a = (kind === 'pin' ? lastApps.pins : lastApps.others)[i];
-  if (a && a.wins.length) items.push({ label: a.wins.length > 1 ? 'Alle ' + a.wins.length + ' Fenster schließen' : 'Fenster schließen', click: () => sendHelper({ c: 'close', h: a.wins }) });
-  if (!items.length) return;
-  // Solange das Menü offen ist, bleibt die Insel aufgeklappt.
-  send('ev', { t: 'menu', on: true });
+  if (!a) return [];
+  const file = appFile(kind, i), running = a.wins.length > 0, items = [];
+  items.push({ label: a.name || 'Programm', enabled: false });
+  items.push({ label: running ? 'Neues Fenster öffnen' : 'Starten', click: () => launchNew(kind, i) });
+  if (file && /\.exe$/i.test(file)) items.push({ label: 'Als Administrator ausführen', click: () => startAdmin(file) });
+  if (file || (kind === 'pin' && cfg.pins[i])) items.push({ label: 'Dateispeicherort öffnen', click: () => shell.showItemInFolder(file || cfg.pins[i].path) });
+  items.push({ type: 'separator' });
+  if (kind === 'pin') items.push({ label: 'Von der Insel lösen', click: () => { cfg.pins.splice(i, 1); saveCfg(); pushApps(); } });
+  else if (file) items.push({ label: 'An die Insel anheften', click: () => addPins([file]) });
+  if (running) {
+    items.push({ type: 'separator' });
+    items.push({ label: a.wins.length > 1 ? 'Alle ' + a.wins.length + ' Fenster schließen' : 'Fenster schließen', click: () => sendHelper({ c: 'close', h: a.wins }) });
+    items.push({ label: 'Task beenden (erzwingen)', click: () => sendHelper({ c: 'kill', h: a.wins }) });
+  }
+  items.push({ type: 'separator' });
+  items.push({ label: 'Task-Manager', click: () => startTarget('taskmgr.exe') });
+  return items;
+}
+// Rechtsklick auf den Start-Knopf: wie Win+X
+function startMenuTemplate() {
+  return [
+    { label: 'Installierte Apps', click: () => startTarget('ms-settings:appsfeatures') },
+    { label: 'Energieoptionen', click: () => startTarget('ms-settings:powersleep') },
+    { label: 'Ereignisanzeige', click: () => startTarget('eventvwr.msc') },
+    { label: 'System', click: () => startTarget('ms-settings:about') },
+    { label: 'Geräte-Manager', click: () => startTarget('devmgmt.msc') },
+    { label: 'Netzwerkverbindungen', click: () => startTarget('ms-settings:network') },
+    { label: 'Datenträgerverwaltung', click: () => startTarget('diskmgmt.msc') },
+    { label: 'Computerverwaltung', click: () => startTarget('compmgmt.msc') },
+    { label: 'Terminal', click: () => startTarget('wt.exe') },
+    { label: 'Terminal (Administrator)', click: () => startAdmin('wt.exe') },
+    { type: 'separator' },
+    { label: 'Task-Manager', click: () => startTarget('taskmgr.exe') },
+    { label: 'Einstellungen', click: () => startTarget('ms-settings:') },
+    { label: 'Explorer', click: () => startTarget('explorer.exe') },
+    { label: 'Suchen', click: () => send('ev', { t: 'go', s: 'start' }) },
+    { label: 'Ausführen', click: () => combo(0x5B, 0x52) },
+    { type: 'separator' },
+    { label: 'Herunterfahren oder abmelden', submenu: [
+      { label: 'Abmelden', click: () => { cleanup(); startTarget('shutdown.exe /l'); } },
+      { label: 'Energie sparen', click: () => { try { spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)"], { windowsHide: true, detached: true, stdio: 'ignore' }).unref(); } catch (_) {} } },
+      { label: 'Neu starten', click: () => ipcMain.emit('power', {}, 'restart') },
+      { label: 'Herunterfahren', click: () => ipcMain.emit('power', {}, 'off') }
+    ] },
+    { label: 'Desktop', click: () => combo(0x5B, 0x44) }
+  ];
+}
+// Rechtsklick auf eine freie Stelle der Insel
+function islandMenuTemplate() {
+  return [
+    { label: 'Task-Manager', click: () => startTarget('taskmgr.exe') },
+    { label: 'Desktop anzeigen', click: () => combo(0x5B, 0x44) },
+    { label: 'Schnelleinstellungen (WLAN, Bluetooth, Akku)', click: () => combo(0x5B, 0x41) },
+    { label: 'Mitteilungszentrale', click: () => combo(0x5B, 0x4E) },
+    { type: 'separator' },
+    { label: 'Position sperren', type: 'checkbox', checked: !!cfg.locked, click: m => { cfg.locked = m.checked; saveCfg(); send('ev', { t: 'cfg', locked: cfg.locked, autoHide: !!cfg.autoHide }); } },
+    { label: 'Automatisch ausblenden', type: 'checkbox', checked: !!cfg.autoHide, click: m => { cfg.autoHide = m.checked; saveCfg(); updateHidden(); send('ev', { t: 'cfg', locked: !!cfg.locked, autoHide: cfg.autoHide }); } },
+    { label: 'Einstellungen der Insel …', click: () => send('ev', { t: 'go', s: 'settings' }) },
+    { label: 'Taskleisten-Einstellungen von Windows', click: () => startTarget('ms-settings:taskbar') },
+    { type: 'separator' },
+    { label: 'Insel beenden', click: () => { cleanup(); setTimeout(() => app.exit(0), 900); } }
+  ];
+}
+function popupMenu(items) {
+  if (!items.length || !win || win.isDestroyed()) return;
+  send('ev', { t: 'menu', on: true });   // solange das Menü offen ist, bleibt die Insel aufgeklappt
   Menu.buildFromTemplate(items).popup({ window: win, callback: () => send('ev', { t: 'menu', on: false }) });
-});
+}
+ipcMain.on('app-menu', (_e, { kind, i }) => popupMenu(appMenuTemplate(kind, i)));
+ipcMain.on('start-menu', () => popupMenu(startMenuTemplate()));
+ipcMain.on('island-menu', () => popupMenu(islandMenuTemplate()));
+ipcMain.on('app-new', (_e, { kind, i }) => launchNew(kind, i));
+if (process.env.INSEL_SHOT) {
+  global.inselMenus = () => ({ app: appMenuTemplate, start: startMenuTemplate, island: islandMenuTemplate });
+  global.inselWins = () => lastWindows;
+  global.inselApps = () => lastApps;
+  global.inselHelper = cmd => sendHelper(cmd);
+}
 ipcMain.on('pin-add', async () => {
   const r = await dialog.showOpenDialog({
     title: 'Programm oder Spiel anheften',

@@ -64,6 +64,11 @@ jobs:
           grep -q '^klick: nach Vollbild: vorher=idle hover=hub klick=quick' shots/helper.log
           grep -q '^klick: Windows-Taste im Vollbild: offen=start bleibt=start zweiter Druck=idle' shots/helper.log
           grep '^suche' shots/helper.log || true
+          grep '^menü' shots/helper.log || true
+          grep -q '^menü: Task beenden: Editor beendet' shots/helper.log
+          grep -q '^menü: App: .*Task beenden (erzwingen) | Task-Manager' shots/helper.log
+          grep -q '^menü: Start: .*Geräte-Manager.*Task-Manager.*Ausführen' shots/helper.log
+          grep -q '^menü: Insel: Task-Manager | Desktop anzeigen' shots/helper.log
           grep -q '^klick: Zurück ins Spiel: offen=start .*sofort versteckt=true' shots/helper.log
           grep -q '^klick: Automatisch ausblenden: versteckt=true Rand=sichtbar weg=versteckt' shots/helper.log
           grep -q '^suche: deinstallieren: .*Installierte Apps' shots/helper.log

@@ -85,6 +85,25 @@ internal static class Program
             case "back": WindowList.Back(); break;
             case "search": FileSearch.Run(r.GetProperty("id").GetInt64(), r.GetProperty("q").GetString() ?? "", Emit); break;
             case "winsearch": WinSearch.Open(r.GetProperty("q").GetString() ?? ""); break;
+            case "kill":   // Task beenden: Programm hart beenden, auch wenn es nicht mehr reagiert
+                {
+                    var done = new HashSet<uint>();
+                    foreach (var e in r.GetProperty("h").EnumerateArray())
+                    {
+                        Native.GetWindowThreadProcessId(new IntPtr(e.GetInt64()), out uint pid);
+                        if (pid <= 4 || pid == hostPid || pid == (uint)Environment.ProcessId || !done.Add(pid)) continue;
+                        try { using var p = System.Diagnostics.Process.GetProcessById((int)pid); p.Kill(); }
+                        catch { Emit(new { t = "toast", m = "Konnte nicht beendet werden – dafür braucht es Administratorrechte. Task-Manager als Administrator öffnen." }); }
+                    }
+                }
+                break;
+            case "combo":   // Windows-Tastenkürzel auslösen (Win+D, Win+A, Win+N, Win+R)
+                {
+                    var keys = r.GetProperty("k").EnumerateArray().Select(x => (byte)x.GetInt32()).ToList();
+                    foreach (var k in keys) Native.keybd_event(k, 0, 0, UIntPtr.Zero);
+                    for (int i = keys.Count - 1; i >= 0; i--) Native.keybd_event(keys[i], 0, 2, UIntPtr.Zero);
+                }
+                break;
             case "close":   // Fenster eines Programms schließen (wie das X im Fenster)
                 foreach (var e in r.GetProperty("h").EnumerateArray()) Native.PostMessage(new IntPtr(e.GetInt64()), 0x10 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
                 break;

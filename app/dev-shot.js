@@ -86,6 +86,30 @@ module.exports = win => {
       await wait(s === 'start' ? 6000 : 900);
       fs.writeFileSync(path.join(out, s + '.png'), (await win.webContents.capturePage()).toPNG());
     }
+    // Rechtsklick-Menüs: Einträge prüfen, und "Task beenden" an einem echten Programm
+    if (process.env.INSEL_REAL) {
+      const log2 = t => fs.appendFileSync(path.join(out, 'helper.log'), 'menü: ' + t + '\n');
+      try {
+        const m = global.inselMenus();
+        const labels = t => t.map(x => x.label).filter(Boolean).join(' | ');
+        log2('Start: ' + labels(m.start()));
+        log2('Insel: ' + labels(m.island()));
+        require('child_process').spawn('notepad.exe', [], { detached: true, stdio: 'ignore' }).unref();
+        let note = null;
+        for (let k = 0; k < 20 && !note; k++) { await wait(500); note = global.inselWins().find(w => /notepad/i.test(w.exe)); }
+        if (!note) log2('Task beenden: kein Editor-Fenster gefunden');
+        else {
+          await wait(1200);
+          const grp = require('electron').ipcMain;
+          const all = (global.inselApps ? global.inselApps() : null);
+          log2('App: ' + labels(m.app('other', Math.max(0, (all ? all.others : []).findIndex(a => a.wins.includes(note.h))))));
+          global.inselHelper({ c: 'kill', h: [note.h] });
+          let gone = false;
+          for (let k = 0; k < 10 && !gone; k++) { await wait(500); gone = !global.inselWins().some(w => w.h === note.h); }
+          log2('Task beenden: ' + (gone ? 'Editor beendet' : 'Editor läuft noch'));
+        }
+      } catch (e) { log2('Fehler ' + e.message); }
+    }
     // Suche im Menü (das Menü ist nach der Bilderreihe offen)
     for (const q of ['deinstallieren', 'programme hinzufügen', 'editor']) {
       try {
