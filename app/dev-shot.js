@@ -143,6 +143,22 @@ module.exports = win => {
         fs.appendFileSync(path.join(out, 'helper.log'), 'suche: ' + q + ': ' + labels + '\n');
       } catch (e) { fs.appendFileSync(path.join(out, 'helper.log'), 'suche: Fehler ' + e.message + '\n'); }
     }
+    // Häufigkeit: ein Programm aus dem Menü starten, danach muss es oben unter "Häufig verwendet" stehen
+    if (process.env.INSEL_REAL) {
+      const hlog = t => fs.appendFileSync(path.join(out, 'helper.log'), 'häufig: ' + t + '\n');
+      try {
+        const list = global.inselStartApps();
+        const a = list.find(x => /^(editor|notepad|rechner|calculator|paint)$/i.test(x.name)) || list[Math.min(5, list.length - 1)];
+        require('electron').ipcMain.emit('start-launch', {}, a.id);
+        await wait(1500);
+        await win.webContents.executeJavaScript(`document.querySelector('#island').dataset.state='idle'`); await wait(600);
+        await win.webContents.executeJavaScript(`document.querySelector('[data-start]').click()`); await wait(3500);
+        const top = await win.webContents.executeJavaScript(`(() => { const g = document.querySelector('#sGrid'); const h = g.querySelectorAll('.s-gh'); if (!h.length) return []; const out = []; for (let el = h[0].nextElementSibling; el && !el.classList.contains('s-gh'); el = el.nextElementSibling) out.push(el.title); return out; })()`);
+        fs.writeFileSync(path.join(out, 'start-haeufig.png'), (await win.webContents.capturePage()).toPNG());
+        hlog('gestartet=' + a.name + ' oben=' + top.join(', '));
+        hlog(top.includes(a.name) ? 'ok' : 'fehlt');
+      } catch (e) { hlog('Fehler ' + e.message); }
+    }
     // Milchglas-Test: Sieht die Bildschirmaufnahme die Insel selbst? (Soll sie nicht.)
     if (process.env.INSEL_REAL) {
       const probe = `(async () => {

@@ -396,17 +396,27 @@
   const hit = (text, ws) => { const t = norm(text); return ws.length > 0 && ws.every(w => t.includes(w)); };
   const appIcon = a => iconUrls[a.id] ? '<img src="' + esc(iconUrls[a.id]) + '" alt="">' : '<span class="letter">' + esc(a.name.charAt(0).toUpperCase()) + '</span>';
 
-  // Ohne Suchtext: alle Programme als Raster
+  // Ohne Suchtext: oben die meistgenutzten Programme, darunter alle von A bis Z
   function drawGrid() {
-    shown = allApps.slice(0, 60);
-    sGrid.innerHTML = shown.length ? shown.map((a, i) => '<button class="s-app" data-si="' + i + '" style="--i:' + Math.min(i, 14) + '" title="' + esc(a.name) + '">' +
-      appIcon(a) + '<span class="n">' + esc(a.name) + '</span></button>').join('') : '<div class="s-empty">' + (allApps.length ? 'Keine Programme gefunden.' : 'Programme werden geladen …') + '</div>';
+    const top = allApps.filter(a => a.score > 0).sort((a, b) => b.score - a.score).slice(0, 15);
+    shown = top.concat(allApps);
+    const cell = (a, i) => '<button class="s-app" data-si="' + i + '" style="--i:' + Math.min(i, 14) + '" title="' + esc(a.name) + '">' + appIcon(a) + '<span class="n">' + esc(a.name) + '</span></button>';
+    let h = '';
+    if (top.length) h += '<div class="s-gh">Häufig verwendet</div>' + top.map((a, i) => cell(a, i)).join('') + '<div class="s-gh">Alle Apps</div>';
+    h += allApps.map((a, i) => cell(a, top.length + i)).join('');
+    sGrid.innerHTML = allApps.length ? h : '<div class="s-empty">Programme werden geladen …</div>';
     sGrid.scrollTop = 0;
     loadIcons(shown, () => shown.forEach((a, i) => { const b = sGrid.querySelector('[data-si="' + i + '"] .letter'); if (b && iconUrls[a.id]) b.outerHTML = '<img src="' + esc(iconUrls[a.id]) + '" alt="">'; }));
   }
+  // Symbole in Paketen zu 60 nachladen (erst die oben sichtbaren)
   function loadIcons(apps, done) {
-    const need = apps.filter(a => !(a.id in iconUrls)).map(a => a.id);
-    if (need.length) api.startIcons(need).then(res => { Object.assign(iconUrls, res); done(); });
+    const need = [...new Set(apps.filter(a => !(a.id in iconUrls)).map(a => a.id))];
+    const next = () => {
+      const part = need.splice(0, 60);
+      if (!part.length) return;
+      api.startIcons(part).then(res => { Object.assign(iconUrls, res); done(); next(); });
+    };
+    next();
   }
 
   // Mit Suchtext: Liste wie bei der Windows-Suche
@@ -418,7 +428,7 @@
   function drawList(q, keepLabel) {
     const ws = wordsOf(q), first = ws[0] || '';
     const apps = allApps.filter(a => hit(a.name, ws))
-      .sort((a, b) => norm(a.name).indexOf(first) - norm(b.name).indexOf(first)).slice(0, 6)
+      .sort((a, b) => (norm(b.name).startsWith(first) - norm(a.name).startsWith(first)) || ((b.score || 0) - (a.score || 0)) || (norm(a.name).indexOf(first) - norm(b.name).indexOf(first))).slice(0, 6)
       .map(a => ({ label: a.name, sub: 'App', app: a, run: () => { api.startLaunch(a.id); setState('idle'); } }));
     const sets = settingsList.filter(s => hit(s.name + ' ' + s.sub + ' ' + s.keys, ws)).slice(0, 6)
       .map(s => ({ label: s.name, sub: s.sub, ic: ICON.gear, run: () => { api.runSetting(s.i); setState('idle'); } }));

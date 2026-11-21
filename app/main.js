@@ -16,7 +16,7 @@ const Z = () => (SCALES.includes(cfg.scale) ? cfg.scale : 1);
 const W = () => Math.round(WIN_W * Z()), H = () => Math.round(WIN_H * Z());
 
 let win = null, helper = null, quitting = false;
-let cfg = { pins: [], pos: null, autoHide: false, scale: 1, micKey: true, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
+let cfg = { pins: [], pos: null, usage: {}, autoHide: false, scale: 1, micKey: true, locked: false, clear: false, winKey: true, hideFullscreen: true, note: '', hideTaskbar: true, glass: 'bild', frames: false, notify: { on: true, off: [] }, notifyApps: [],
             widgets: { clock: { on: false }, calendar: { on: false }, system: { on: false } } };
 let lastTray = { t: 'tray', ok: false, icons: [] }, lastMic = { t: 'mic', has: false, muted: false };
 let lastWindows = [], lastApps = { pins: [], others: [] }, drag = null, hiddenForFullscreen = false;
@@ -159,7 +159,8 @@ function startHelper() {
     else if (ev.t === 'winthumb') { const w = thumbWait.get(ev.h); if (w) { thumbWait.delete(ev.h); w(ev.data || ''); } }
     else if (ev.t === 'media' || ev.t === 'thumb') { if (ev.t === 'media') lastMedia = ev; else lastThumb = ev; send('ev', ev); toWidget('music', ev); }
     else if (ev.t === 'appicon') { const w = iconWait.get(ev.id); if (w) { iconWait.delete(ev.id); startIcons.set(ev.id, ev.data || ''); w(ev.data || ''); } }
-    else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); }
+    else if (ev.t === 'hello') { for (const k of Object.keys(widgetWins)) sinkWidget(k); sendHelper({ c: 'usage' }); }
+    else if (ev.t === 'usage') { winUsage = new Map((ev.list || []).map(u => [String(u.id).toLowerCase(), u])); }
     else if (ev.t === 'fullscreen') {
       logLine('Vollbild ' + (ev.on ? 'an' : 'aus') + (ev.why ? ' (' + ev.why + ')' : ''));
       fullscreenNow = !!ev.on;
@@ -511,10 +512,21 @@ function loadStartApps() {
   });
   return startLoading;
 }
+// Wie oft ein Programm genutzt wird: eigene Starts aus der Insel zählen stark, dazu die Zählung von Windows.
+// Kürzlich Genutztes wiegt mehr als lange nicht mehr Genutztes.
+let winUsage = new Map();
+setInterval(() => sendHelper({ c: 'usage' }), 15 * 60 * 1000);
+function usageScore(id) {
+  const own = (cfg.usage || {})[id], w = winUsage.get(String(id).toLowerCase());
+  const n = (own ? own.n * 5 : 0) + (w ? Math.min(w.n, 200) : 0);
+  if (!n) return 0;
+  const age = (Date.now() - Math.max(own ? own.last : 0, w ? w.last : 0)) / 864e5;
+  return n * (age < 1 ? 2 : age < 7 ? 1.5 : age < 30 ? 1 : 0.5);
+}
 ipcMain.handle('start-apps', async () => {
   if (!startApps.length) await loadStartApps();
   else if (Date.now() - startAppsAt > 120000) loadStartApps();
-  return startApps;
+  return startApps.map(a => Object.assign({}, a, { score: usageScore(a.id) }));
 });
 ipcMain.handle('start-icons', async (_e, ids) => {
   const res = {};
@@ -530,6 +542,12 @@ ipcMain.handle('start-icons', async (_e, ids) => {
 ipcMain.on('start-launch', (_e, id) => {
   if (!startApps.some(a => a.id === id)) return;
   try { spawn('explorer.exe', ['shell:AppsFolder\\' + id], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+  // mitzählen; nur die 300 meistgenutzten behalten
+  const u = cfg.usage || (cfg.usage = {});
+  u[id] = { n: ((u[id] && u[id].n) || 0) + 1, last: Date.now() };
+  const keys = Object.keys(u);
+  if (keys.length > 300) keys.sort((x, y) => u[x].n - u[y].n).slice(0, keys.length - 300).forEach(k => delete u[k]);
+  saveCfg();
 });
 ipcMain.on('power', (_e, kind) => {
   const run = (cmd, args) => { try { spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch (_) {} };
@@ -702,6 +720,7 @@ if (process.env.INSEL_SHOT) {
   global.inselWins = () => lastWindows;
   global.inselApps = () => lastApps;
   global.inselTray = () => lastTray;
+  global.inselStartApps = () => startApps;
   global.inselHelper = cmd => sendHelper(cmd);
 }
 ipcMain.on('pin-add', async () => {

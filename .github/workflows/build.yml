@@ -65,6 +65,8 @@ jobs:
           grep -q '^klick: Windows-Taste im Vollbild: offen=start bleibt=start zweiter Druck=idle' shots/helper.log
           grep '^suche' shots/helper.log || true
           grep '^menü' shots/helper.log || true
+          grep '^häufig' shots/helper.log || true
+          grep -q '^häufig: ok' shots/helper.log
           grep -q '^menü: Task beenden: Editor beendet' shots/helper.log
           grep -q '^menü: Infobereich: links=Left danach=Left,Right' shots/helper.log
           grep -q '^menü: App: .*Task beenden (erzwingen) | Task-Manager' shots/helper.log

@@ -1,6 +1,7 @@
 // Zusätze: Windows-Taste abfangen, Lautstärke pro Programm, Mikrofon stummschalten.
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 using System.Windows.Threading;
 
 namespace InselHelper;
@@ -240,4 +241,40 @@ internal static class Audio
             if (level > 0) vol.SetMute(false, ref ctx);
         });
     }
+}
+
+// ---------- Wie oft und wann Programme gestartet wurden (das merkt sich Windows selbst unter "UserAssist") ----------
+internal static class Usage
+{
+    public static List<object> Read()
+    {
+        var res = new Dictionary<string, (int n, long last)>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var ua = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist");
+            if (ua != null)
+                foreach (var g in ua.GetSubKeyNames())
+                {
+                    using var c = ua.OpenSubKey(g + @"\Count");
+                    if (c == null) continue;
+                    foreach (var name in c.GetValueNames())
+                    {
+                        if (c.GetValue(name) is not byte[] b || b.Length < 68) continue;
+                        int n = BitConverter.ToInt32(b, 4);       // Anzahl Starts
+                        long ft = BitConverter.ToInt64(b, 60);    // zuletzt gestartet
+                        if (n <= 0) continue;
+                        long last = 0;
+                        try { if (ft > 0) last = DateTimeOffset.FromFileTime(ft).ToUnixTimeMilliseconds(); } catch { }
+                        var key = Rot13(name);                    // Windows speichert die Namen leicht verschlüsselt
+                        res[key] = res.TryGetValue(key, out var o) ? (o.n + n, Math.Max(o.last, last)) : (n, last);
+                    }
+                }
+        }
+        catch { }
+        return res.Select(kv => (object)new { id = kv.Key, n = kv.Value.n, last = kv.Value.last }).ToList();
+    }
+
+    private static string Rot13(string s) => new string(s.Select(c =>
+        c >= 'a' && c <= 'z' ? (char)('a' + (c - 'a' + 13) % 26) :
+        c >= 'A' && c <= 'Z' ? (char)('A' + (c - 'A' + 13) % 26) : c).ToArray());
 }

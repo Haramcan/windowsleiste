@@ -83,6 +83,7 @@ internal static class Program
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
             case "winkey": WinKey.Enabled = r.GetProperty("on").GetBoolean(); break;
             case "back": WindowList.Back(); break;
+            case "usage": Emit(new { t = "usage", list = Usage.Read() }); break;
             case "search": FileSearch.Run(r.GetProperty("id").GetInt64(), r.GetProperty("q").GetString() ?? "", Emit); break;
             case "winsearch": WinSearch.Open(r.GetProperty("q").GetString() ?? ""); break;
             case "kill":   // Task beenden: Programm hart beenden, auch wenn es nicht mehr reagiert
