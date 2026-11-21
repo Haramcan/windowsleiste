@@ -121,7 +121,8 @@ module.exports = win => {
           '$t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 4000; $t1.add_Tick({ $n.Text = "InselTest 2 neue"; $t1.Stop() }); $t1.Start()',
           '$t2 = New-Object System.Windows.Forms.Timer; $t2.Interval = 45000; $t2.add_Tick({ $n.Visible = $false; [System.Windows.Forms.Application]::Exit() }); $t2.Start()',
           '[System.Windows.Forms.Application]::Run()'].join('\r\n'));
-        const psRun = (file, logName, env) => { const fd = fs.openSync(path.join(out, logName), 'a'); const c = require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', path.resolve(file)], { env: Object.assign({}, process.env, env || {}), stdio: ['ignore', fd, fd], windowsHide: true }); c.unref(); return c; };
+        // windowsHide nur für Programme ohne eigenes Fenster: Windows wendet "versteckt" sonst auch auf deren erstes Fenster an
+        const psRun = (file, logName, env, hide = true) => { const fd = fs.openSync(path.join(out, logName), 'a'); const c = require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', path.resolve(file)], { env: Object.assign({}, process.env, env || {}), stdio: ['ignore', fd, fd], windowsHide: hide }); c.unref(); return c; };
         const psLog = n => { try { return fs.readFileSync(path.join(out, n), 'utf8').replace(/\s+/g, ' ').trim().slice(0, 400); } catch (_) { return '(keine Ausgabe)'; } };
         psRun(ps1, 'trayicon.log', { INSEL_TRAYFILE: path.resolve(trayFile) });
         let ti = null;
@@ -153,7 +154,7 @@ module.exports = win => {
         else {
           eipc.emit('open-with', {}, { kind: 'other', i: ni, paths: [t2] });
           let titles = '';
-          for (let k = 0; k < 16; k++) { await wait(500); ni = findNote(); const g = global.inselApps().others[ni]; if (g && g.wins.length >= 2) { titles = global.inselWins().filter(w => g.wins.includes(w.h)).map(w => w.title).join(' / '); break; } }
+          for (let k = 0; k < 20; k++) { await wait(500); ni = findNote(); const g = global.inselApps().others[ni]; if (!g) continue; titles = global.inselWins().filter(w => g.wins.includes(w.h)).map(w => w.title).join(' / '); if (/insel-zwei/.test(titles)) break; }
           log2('Öffnen mit: ' + (/insel-zwei/.test(titles) ? 'ok' : 'fehlt') + ' (' + titles + ')');
           ni = findNote();
           const th = await win.webContents.executeJavaScript(`window.insel.winThumbs('other', ${ni}).then(l => l.length + ' Fenster, ' + l.filter(x => x.data).length + ' mit Bild')`);
@@ -164,7 +165,7 @@ module.exports = win => {
           await wait(1000);
         }
         // Fortschrittsbalken am Symbol (wie bei einem Download)
-        psRun(path.join(__dirname, 'test', 'progress.ps1'), 'progress.log');
+        psRun(path.join(__dirname, 'test', 'progress.ps1'), 'progress.log', {}, false);
         let pg = null;
         let seenWin = 0;
         for (let k = 0; k < 90 && !pg; k++) { await wait(500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0); if (!seenWin && global.inselWins().some(w => /InselFortschritt/.test(w.title))) seenWin = (k + 1) / 2; }
