@@ -72,6 +72,7 @@ jobs:
           grep 'traydiag' shots/helper.log || true
           grep -q '^menü: Öffnen mit: ok' shots/helper.log
           grep -q '^menü: Vorschau: 2 Fenster' shots/helper.log
+          grep -q '^menü: Fortschritt: Status 2, \(39\|40\|41\) %' shots/helper.log
           grep -q '^menü: App: .*Task beenden (erzwingen) | Task-Manager' shots/helper.log
           grep -q '^menü: Start: .*Geräte-Manager.*Task-Manager.*Ausführen' shots/helper.log
           grep -q '^menü: Insel: Task-Manager | Desktop anzeigen' shots/helper.log

@@ -161,7 +161,11 @@ function startHelper() {
     if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + (ev.err ? ' ' + ev.err : '') + (ev.t === 'traydiag' ? ' ' + JSON.stringify(ev) : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
-    else if (ev.t === 'taskinfo') { taskInfo = new Map((ev.list || []).map(x => [x.h, x])); pushApps(); }
+    else if (ev.t === 'taskinfo') {
+      // Windows liefert den Fortschritt als Wert von 0 bis 65535, nicht in Prozent
+      taskInfo = new Map((ev.list || []).map(x => [x.h, Object.assign({}, x, { raw: x.val, val: Math.max(0, Math.min(100, Math.round((x.val > 100 ? x.val / 65535 : x.val / 100) * 100))) })]));
+      pushApps();
+    }
     else if (ev.t === 'assoc') { Object.entries(ev.map || {}).forEach(([k, v]) => assocMap.set(k, String(v || '').toLowerCase())); }
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
     else if (ev.t === 'winkey') onWinKey();

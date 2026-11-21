@@ -70,7 +70,7 @@ internal static class Tray
                 bool flash = w.State == ApplicationWindow.WindowState.Flashing;
                 string badge = w.OverlayIcon != null ? Png(w.OverlayIcon) : "";
                 if (prog == 0 && !flash && badge.Length == 0) continue;
-                tasks.Add(new { h = w.Handle.ToInt64(), prog, val = Math.Clamp(w.ProgressValue, 0, 100), flash, badge, badgeText = w.OverlayIconDescription ?? "" });
+                tasks.Add(new { h = w.Handle.ToInt64(), prog, val = w.ProgressValue, flash, badge, badgeText = w.OverlayIconDescription ?? "" });
             }
         var ts = JsonSerializer.Serialize(tasks);
         if (ts != lastTasks) { lastTasks = ts; emit(new { t = "taskinfo", list = tasks }); }

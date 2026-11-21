@@ -170,7 +170,8 @@ module.exports = win => {
         let seenWin = 0;
         for (let k = 0; k < 90 && !pg; k++) { await wait(500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0); if (!seenWin && global.inselWins().some(w => /InselFortschritt/.test(w.title))) seenWin = (k + 1) / 2; }
         log2('Fortschritt: Testfenster ' + (seenWin ? 'nach ' + seenWin + ' s' : 'nie') + ' gesehen');
-        log2('Fortschritt: ' + (pg ? 'Status ' + pg.prog + ', ' + pg.val + ' %' : 'nicht empfangen') + ' | Ausgabe: ' + psLog('progress.log') + ' | Fenster: ' + (global.inselWins().some(w => /InselFortschritt/.test(w.title)) ? 'da' : 'fehlt'));
+        await wait(1500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0) || pg;
+        log2('Fortschritt: ' + (pg ? 'Status ' + pg.prog + ', ' + pg.val + ' % (roh ' + pg.raw + ')' : 'nicht empfangen') + ' | Ausgabe: ' + psLog('progress.log') + ' | Fenster: ' + (global.inselWins().some(w => /InselFortschritt/.test(w.title)) ? 'da' : 'fehlt'));
       } catch (e) { log2('Fehler ' + e.message); }
     }
     // Suche im Menü (das Menü ist nach der Bilderreihe offen)
