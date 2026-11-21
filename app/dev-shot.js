@@ -113,20 +113,24 @@ module.exports = win => {
         fs.writeFileSync(ps1, [
           '$ErrorActionPreference = "Stop"',
           'trap { $_ | Out-String | Add-Content -Path ($env:INSEL_TRAYFILE + ".err"); exit 1 }',
+          'Write-Output "gestartet"',
           'Add-Type -AssemblyName System.Windows.Forms, System.Drawing',
           '$n = New-Object System.Windows.Forms.NotifyIcon',
-          '$n.Icon = [System.Drawing.SystemIcons]::Information; $n.Text = "InselTest"; $n.Visible = $true',
+          '$n.Icon = [System.Drawing.SystemIcons]::Information; $n.Text = "InselTest"; $n.Visible = $true; Write-Output ("sichtbar " + $n.Visible)',
           '$n.add_MouseClick({ param($s, $e) Add-Content -Path $env:INSEL_TRAYFILE -Value ([string]$e.Button) })',
           '$t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 4000; $t1.add_Tick({ $n.Text = "InselTest 2 neue"; $t1.Stop() }); $t1.Start()',
           '$t2 = New-Object System.Windows.Forms.Timer; $t2.Interval = 45000; $t2.add_Tick({ $n.Visible = $false; [System.Windows.Forms.Application]::Exit() }); $t2.Start()',
           '[System.Windows.Forms.Application]::Run()'].join('\r\n'));
-        require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', ps1], { env: Object.assign({}, process.env, { INSEL_TRAYFILE: trayFile }), detached: true, stdio: 'ignore', windowsHide: true }).unref();
+        const psRun = (file, logName, env) => { const fd = fs.openSync(path.join(out, logName), 'a'); const c = require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', path.resolve(file)], { env: Object.assign({}, process.env, env || {}), stdio: ['ignore', fd, fd], windowsHide: true }); c.unref(); return c; };
+        const psLog = n => { try { return fs.readFileSync(path.join(out, n), 'utf8').replace(/\s+/g, ' ').trim().slice(0, 400); } catch (_) { return '(keine Ausgabe)'; } };
+        psRun(ps1, 'trayicon.log', { INSEL_TRAYFILE: path.resolve(trayFile) });
         let ti = null;
         for (let k = 0; k < 30 && !ti; k++) { await wait(500); ti = (global.inselTray().icons || []).find(x => /InselTest/.test(x.title)); }
         if (!ti) {
           log2('Infobereich: Testsymbol nicht gefunden (' + (global.inselTray().icons || []).map(x => x.title).join(', ') + ')');
           try { log2('Infobereich: Fehler im Testprogramm: ' + fs.readFileSync(trayFile + '.err', 'utf8').replace(/\s+/g, ' ').slice(0, 300)); } catch (_) { log2('Infobereich: Testprogramm ohne Fehler'); }
           global.inselHelper({ c: 'traydiag' }); await wait(800);
+          log2('Infobereich: Ausgabe Testprogramm: ' + psLog('trayicon.log'));
         }
         else {
           const id = ti.id;   // Kennung von vor der Textänderung
@@ -137,11 +141,11 @@ module.exports = win => {
           global.inselHelper({ c: 'tray', id, b: 'right' }); await wait(1500);
           log2('Infobereich: links=' + l + ' danach=' + read());
         }
-        // Öffnen mit, Vorschau mehrerer Fenster, zuletzt geöffnete Dateien
-        const { shell: eshell, ipcMain: eipc } = require('electron');
-        const t1 = path.join(out, 'insel-eins.txt'), t2 = path.join(out, 'insel-zwei.txt');
+        // Öffnen mit und Vorschau mehrerer Fenster (Editor mit einer Datei starten, zweite Datei "darauf ziehen")
+        const eipc = require('electron').ipcMain;
+        const t1 = path.resolve(out, 'insel-eins.txt'), t2 = path.resolve(out, 'insel-zwei.txt');
         fs.writeFileSync(t1, 'eins'); fs.writeFileSync(t2, 'zwei');
-        eshell.openPath(t1);   // über Windows geöffnet: landet unter "Zuletzt verwendet"
+        require('child_process').spawn('notepad.exe', [t1], { detached: true, stdio: 'ignore' }).unref();
         const findNote = () => global.inselApps().others.findIndex(a => /notepad/i.test(a.exe || ''));
         let ni = -1;
         for (let k = 0; k < 20 && ni < 0; k++) { await wait(500); ni = findNote(); }
@@ -154,16 +158,16 @@ module.exports = win => {
           ni = findNote();
           const th = await win.webContents.executeJavaScript(`window.insel.winThumbs('other', ${ni}).then(l => l.length + ' Fenster, ' + l.filter(x => x.data).length + ' mit Bild')`);
           log2('Vorschau: ' + th);
-          global.inselRefreshRecent(); await wait(2500); global.inselRefreshRecent(); await wait(500);
-          log2('Zuletzt: ' + labels(global.inselMenus().app('other', ni)));
+          global.inselRefreshRecent(); await wait(2500);
+          log2('Zuletzt: .txt öffnet ' + (global.inselAssoc('.txt') || '?') + ' | Menü Editor: ' + labels(global.inselMenus().app('other', ni)).split(' | ').slice(0, 4).join(' | '));
           global.inselHelper({ c: 'kill', h: global.inselApps().others[ni].wins });
           await wait(1000);
         }
         // Fortschrittsbalken am Symbol (wie bei einem Download)
-        require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', path.join(__dirname, 'test', 'progress.ps1')], { detached: true, stdio: 'ignore' }).unref();
+        psRun(path.join(__dirname, 'test', 'progress.ps1'), 'progress.log');
         let pg = null;
         for (let k = 0; k < 30 && !pg; k++) { await wait(500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0); }
-        log2('Fortschritt: ' + (pg ? 'Status ' + pg.prog + ', ' + pg.val + ' %' : 'nicht empfangen'));
+        log2('Fortschritt: ' + (pg ? 'Status ' + pg.prog + ', ' + pg.val + ' %' : 'nicht empfangen') + ' | Ausgabe: ' + psLog('progress.log') + ' | Fenster: ' + (global.inselWins().some(w => /InselFortschritt/.test(w.title)) ? 'da' : 'fehlt'));
       } catch (e) { log2('Fehler ' + e.message); }
     }
     // Suche im Menü (das Menü ist nach der Bilderreihe offen)

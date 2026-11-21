@@ -791,6 +791,7 @@ if (process.env.INSEL_SHOT) {
   global.inselTray = () => lastTray;
   global.inselStartApps = () => startApps;
   global.inselTaskInfo = () => taskInfo;
+  global.inselAssoc = ext => assocMap.get(ext);
   global.inselRefreshRecent = refreshRecent;
   global.inselHelper = cmd => sendHelper(cmd);
 }

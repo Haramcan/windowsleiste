@@ -1,4 +1,5 @@
 # Testprogramm: ein Fenster mit Fortschrittsbalken an seinem Taskleisten-Symbol (40 %), wie ein Download.
+Write-Output 'gestartet'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -TypeDefinition @'
 using System;
@@ -21,7 +22,7 @@ $f = New-Object System.Windows.Forms.Form
 $f.Text = 'InselFortschritt'
 $f.Add_Shown({
   $t0 = New-Object System.Windows.Forms.Timer; $t0.Interval = 2500
-  $t0.Add_Tick({ $t0.Stop(); try { [InselTB]::Set($f.Handle, 40) } catch { } })
+  $t0.Add_Tick({ $t0.Stop(); try { [InselTB]::Set($f.Handle, 40); Write-Output 'Fortschritt gesetzt' } catch { Write-Output ('Fehler: ' + $_) } })
   $t0.Start()
 })
 $t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 25000
