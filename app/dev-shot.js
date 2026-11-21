@@ -1,7 +1,7 @@
 // Entwickler-Hilfe: INSEL_SHOT=ordner npm start  →  speichert Bilder jedes Zustands mit Beispieldaten.
 const fs = require('fs'), path = require('path');
 module.exports = win => {
-  setTimeout(() => require('electron').app.exit(0), 170000);   // nie hängen bleiben
+  setTimeout(() => require('electron').app.exit(0), 210000);   // nie hängen bleiben
   const out = process.env.INSEL_SHOT;
   const wait = ms => new Promise(r => setTimeout(r, ms));
   win.webContents.once('did-finish-load', async () => {
@@ -166,7 +166,9 @@ module.exports = win => {
         // Fortschrittsbalken am Symbol (wie bei einem Download)
         psRun(path.join(__dirname, 'test', 'progress.ps1'), 'progress.log');
         let pg = null;
-        for (let k = 0; k < 30 && !pg; k++) { await wait(500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0); }
+        let seenWin = 0;
+        for (let k = 0; k < 90 && !pg; k++) { await wait(500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0); if (!seenWin && global.inselWins().some(w => /InselFortschritt/.test(w.title))) seenWin = (k + 1) / 2; }
+        log2('Fortschritt: Testfenster ' + (seenWin ? 'nach ' + seenWin + ' s' : 'nie') + ' gesehen');
         log2('Fortschritt: ' + (pg ? 'Status ' + pg.prog + ', ' + pg.val + ' %' : 'nicht empfangen') + ' | Ausgabe: ' + psLog('progress.log') + ' | Fenster: ' + (global.inselWins().some(w => /InselFortschritt/.test(w.title)) ? 'da' : 'fehlt'));
       } catch (e) { log2('Fehler ' + e.message); }
     }

@@ -25,7 +25,8 @@ $script:t0.Interval = 2500
 $script:t0.Add_Tick({ $script:t0.Stop(); try { [InselTB]::Set($script:f.Handle, 40); Write-Output 'Fortschritt gesetzt' } catch { Write-Output ('Fehler: ' + $_) } })
 $script:f = $f
 $f.Add_Shown({ $script:t0.Start() })
-$t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 25000
+Write-Output 'Fenster wird gezeigt'
+$t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 60000
 $t1.Add_Tick({ $f.Close() })
 $t1.Start()
 [System.Windows.Forms.Application]::Run($f)
