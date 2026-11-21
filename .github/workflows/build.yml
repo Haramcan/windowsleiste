@@ -68,7 +68,7 @@ jobs:
           grep '^häufig' shots/helper.log || true
           grep -q '^häufig: ok' shots/helper.log
           grep -q '^menü: Task beenden: Editor beendet' shots/helper.log
-          grep -q '^menü: Infobereich: links=Left danach=Left,Right' shots/helper.log || echo "::warning::Infobereich-Test nicht bestanden"
+          grep -q '^menü: Infobereich: links=Left danach=Left,Right' shots/helper.log
           grep 'traydiag' shots/helper.log || true
           grep -q '^menü: Öffnen mit: ok' shots/helper.log
           grep -q '^menü: Vorschau: 2 Fenster' shots/helper.log

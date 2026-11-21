@@ -20,11 +20,11 @@ public static class InselTB {
 '@
 $f = New-Object System.Windows.Forms.Form
 $f.Text = 'InselFortschritt'
-$f.Add_Shown({
-  $t0 = New-Object System.Windows.Forms.Timer; $t0.Interval = 2500
-  $t0.Add_Tick({ $t0.Stop(); try { [InselTB]::Set($f.Handle, 40); Write-Output 'Fortschritt gesetzt' } catch { Write-Output ('Fehler: ' + $_) } })
-  $t0.Start()
-})
+$script:t0 = New-Object System.Windows.Forms.Timer
+$script:t0.Interval = 2500
+$script:t0.Add_Tick({ $script:t0.Stop(); try { [InselTB]::Set($script:f.Handle, 40); Write-Output 'Fortschritt gesetzt' } catch { Write-Output ('Fehler: ' + $_) } })
+$script:f = $f
+$f.Add_Shown({ $script:t0.Start() })
 $t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 25000
 $t1.Add_Tick({ $f.Close() })
 $t1.Start()
