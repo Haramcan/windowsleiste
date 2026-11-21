@@ -111,6 +111,8 @@ module.exports = win => {
         // Infobereich: ein Testprogramm legt ein Symbol an, ändert danach seinen Text (wie Discord) und schreibt jeden Klick mit
         const trayFile = path.join(out, 'tray.txt'), ps1 = path.join(out, 'trayicon.ps1');
         fs.writeFileSync(ps1, [
+          '$ErrorActionPreference = "Stop"',
+          'trap { $_ | Out-String | Add-Content -Path ($env:INSEL_TRAYFILE + ".err"); exit 1 }',
           'Add-Type -AssemblyName System.Windows.Forms, System.Drawing',
           '$n = New-Object System.Windows.Forms.NotifyIcon',
           '$n.Icon = [System.Drawing.SystemIcons]::Information; $n.Text = "InselTest"; $n.Visible = $true',
@@ -121,7 +123,11 @@ module.exports = win => {
         require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', ps1], { env: Object.assign({}, process.env, { INSEL_TRAYFILE: trayFile }), detached: true, stdio: 'ignore', windowsHide: true }).unref();
         let ti = null;
         for (let k = 0; k < 30 && !ti; k++) { await wait(500); ti = (global.inselTray().icons || []).find(x => /InselTest/.test(x.title)); }
-        if (!ti) log2('Infobereich: Testsymbol nicht gefunden (' + (global.inselTray().icons || []).map(x => x.title).join(', ') + ')');
+        if (!ti) {
+          log2('Infobereich: Testsymbol nicht gefunden (' + (global.inselTray().icons || []).map(x => x.title).join(', ') + ')');
+          try { log2('Infobereich: Fehler im Testprogramm: ' + fs.readFileSync(trayFile + '.err', 'utf8').replace(/\s+/g, ' ').slice(0, 300)); } catch (_) { log2('Infobereich: Testprogramm ohne Fehler'); }
+          global.inselHelper({ c: 'traydiag' }); await wait(800);
+        }
         else {
           const id = ti.id;   // Kennung von vor der Textänderung
           await wait(5500);
@@ -131,6 +137,33 @@ module.exports = win => {
           global.inselHelper({ c: 'tray', id, b: 'right' }); await wait(1500);
           log2('Infobereich: links=' + l + ' danach=' + read());
         }
+        // Öffnen mit, Vorschau mehrerer Fenster, zuletzt geöffnete Dateien
+        const { shell: eshell, ipcMain: eipc } = require('electron');
+        const t1 = path.join(out, 'insel-eins.txt'), t2 = path.join(out, 'insel-zwei.txt');
+        fs.writeFileSync(t1, 'eins'); fs.writeFileSync(t2, 'zwei');
+        eshell.openPath(t1);   // über Windows geöffnet: landet unter "Zuletzt verwendet"
+        const findNote = () => global.inselApps().others.findIndex(a => /notepad/i.test(a.exe || ''));
+        let ni = -1;
+        for (let k = 0; k < 20 && ni < 0; k++) { await wait(500); ni = findNote(); }
+        if (ni < 0) log2('Öffnen mit: kein Editor gefunden');
+        else {
+          eipc.emit('open-with', {}, { kind: 'other', i: ni, paths: [t2] });
+          let titles = '';
+          for (let k = 0; k < 16; k++) { await wait(500); ni = findNote(); const g = global.inselApps().others[ni]; if (g && g.wins.length >= 2) { titles = global.inselWins().filter(w => g.wins.includes(w.h)).map(w => w.title).join(' / '); break; } }
+          log2('Öffnen mit: ' + (/insel-zwei/.test(titles) ? 'ok' : 'fehlt') + ' (' + titles + ')');
+          ni = findNote();
+          const th = await win.webContents.executeJavaScript(`window.insel.winThumbs('other', ${ni}).then(l => l.length + ' Fenster, ' + l.filter(x => x.data).length + ' mit Bild')`);
+          log2('Vorschau: ' + th);
+          global.inselRefreshRecent(); await wait(2500); global.inselRefreshRecent(); await wait(500);
+          log2('Zuletzt: ' + labels(global.inselMenus().app('other', ni)));
+          global.inselHelper({ c: 'kill', h: global.inselApps().others[ni].wins });
+          await wait(1000);
+        }
+        // Fortschrittsbalken am Symbol (wie bei einem Download)
+        require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', path.join(__dirname, 'test', 'progress.ps1')], { detached: true, stdio: 'ignore' }).unref();
+        let pg = null;
+        for (let k = 0; k < 30 && !pg; k++) { await wait(500); pg = [...global.inselTaskInfo().values()].find(x => x.prog > 0); }
+        log2('Fortschritt: ' + (pg ? 'Status ' + pg.prog + ', ' + pg.val + ' %' : 'nicht empfangen'));
       } catch (e) { log2('Fehler ' + e.message); }
     }
     // Suche im Menü (das Menü ist nach der Bilderreihe offen)

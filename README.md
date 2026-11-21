@@ -42,6 +42,10 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Rechtsklick auf den Start-Knopf:** wie Win+X (Geräte-Manager, Terminal, Ausführen, Herunterfahren …).
 - **Rechtsklick auf die Insel:** Task-Manager, Desktop anzeigen, Schnelleinstellungen, Mitteilungszentrale.
 - **Umschalt+Klick** oder **mittlere Maustaste:** neues Fenster. Mehrere Fenster: jeder Klick schaltet weiter.
+- **Fenster-Vorschau:** Maus auf einem Programm zeigt alle seine Fenster; Klick wechselt, Kreuz schließt.
+- **Dateien auf ein Programm ziehen** öffnet sie damit.
+- **Am Symbol:** Fortschritt (z. B. Downloads), Zähler und orange Markierung, wenn ein Programm Aufmerksamkeit will.
+- **Zuletzt geöffnete Dateien** im Rechtsklick-Menü eines Programms.
 - **Regler:** Lautstärke, Ton und Mikrofon stumm, Lautstärke pro Programm.
 - **Einstellungen:** Position, Durchsichtig, Taskleiste, Autostart, Windows-Taste, Aussehen, Widgets, Mitteilungen, Update, Insel beenden.
 

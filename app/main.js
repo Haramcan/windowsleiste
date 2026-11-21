@@ -98,6 +98,13 @@ async function pinIcon(pin) {
 }
 
 // ---------- Programme ----------
+// Was die Fenster eines Programms ihrem Taskleisten-Symbol melden
+let taskInfo = new Map();
+function taskState(wins) {
+  const infos = wins.map(h => taskInfo.get(h)).filter(Boolean);
+  const p = infos.find(x => x.prog > 0), b = infos.find(x => x.badge);
+  return { flash: infos.some(x => x.flash), prog: p ? p.prog : 0, val: p ? p.val : 0, badge: b ? b.badge : '', badgeText: b ? b.badgeText : '' };
+}
 async function pushApps() {
   const mine = process.execPath.toLowerCase();
   const wins = lastWindows.filter(w => w.exe && w.exe.toLowerCase() !== mine);
@@ -106,7 +113,7 @@ async function pushApps() {
     const t = (p.target || '').toLowerCase();
     const ws = t ? wins.filter(w => w.exe.toLowerCase() === t) : [];
     ws.forEach(w => used.add(w.h));
-    pins.push({ name: p.name, icon: await pinIcon(p), wins: ws.map(w => w.h), active: ws.some(w => w.active) });
+    pins.push(Object.assign({ name: p.name, icon: await pinIcon(p), wins: ws.map(w => w.h), active: ws.some(w => w.active) }, taskState(ws.map(w => w.h))));
   }
   for (const w of wins) {
     if (used.has(w.h)) continue;
@@ -116,6 +123,7 @@ async function pushApps() {
     g.wins.push(w.h);
     if (w.active) g.active = true;
   }
+  for (const g of groups.values()) Object.assign(g, taskState(g.wins));
   lastApps = { pins, others: [...groups.values()] };
   send('apps', lastApps);
 }
@@ -150,9 +158,11 @@ function startHelper() {
   helper.on('exit', () => { helper = null; if (!quitting) setTimeout(startHelper, 2000); });
   readline.createInterface({ input: helper.stdout }).on('line', line => {
     let ev; try { ev = JSON.parse(line); } catch (_) { return; }
-    if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + (ev.err ? ' ' + ev.err : '') + '\n'); } catch (_) {} }
+    if (process.env.INSEL_SHOT) { try { fs.appendFileSync(path.join(process.env.INSEL_SHOT, 'helper.log'), 'helper: ' + ev.t + (ev.t === 'error' ? ' ' + ev.m : '') + (ev.err ? ' ' + ev.err : '') + (ev.t === 'traydiag' ? ' ' + JSON.stringify(ev) : '') + '\n'); } catch (_) {} }
     if (ev.t === 'windows') { lastWindows = ev.list || []; pushApps(); }
     else if (ev.t === 'tray') { lastTray = ev; send('ev', ev); }
+    else if (ev.t === 'taskinfo') { taskInfo = new Map((ev.list || []).map(x => [x.h, x])); pushApps(); }
+    else if (ev.t === 'assoc') { Object.entries(ev.map || {}).forEach(([k, v]) => assocMap.set(k, String(v || '').toLowerCase())); }
     else if (ev.t === 'mic') { lastMic = ev; send('ev', ev); }
     else if (ev.t === 'winkey') onWinKey();
     else if (ev.t === 'search') { if (ev.err) logLine('Dateisuche: ' + ev.err); const w = searchWait.get(ev.id); if (w) { searchWait.delete(ev.id); w(ev.items || []); } }
@@ -623,6 +633,35 @@ ipcMain.on('app-click', (_e, { kind, i }) => {
   }
   else if (kind === 'pin' && cfg.pins[i]) shell.openPath(cfg.pins[i].path).then(err => { if (err) send('ev', { t: 'toast', m: 'Konnte nicht gestartet werden: ' + cfg.pins[i].name }); });
 });
+// ---------- Zuletzt geöffnete Dateien pro Programm ----------
+const assocMap = new Map();
+let recentFiles = [];
+function refreshRecent() {
+  if (process.platform !== 'win32') return;
+  try {
+    const dir = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Recent');
+    const items = fs.readdirSync(dir).filter(n => /\.lnk$/i.test(n)).map(n => { const f = path.join(dir, n); try { return { f, m: fs.statSync(f).mtimeMs }; } catch (_) { return null; } })
+      .filter(Boolean).sort((a, b) => b.m - a.m).slice(0, 150);
+    const out = [];
+    for (const it of items) {
+      let target = '';
+      try { target = shell.readShortcutLink(it.f).target || ''; } catch (_) {}
+      const ext = path.win32.extname(target).toLowerCase();
+      if (target && ext) out.push({ path: target, ext, m: it.m });
+    }
+    recentFiles = out;
+    const unknown = [...new Set(out.map(x => x.ext))].filter(e => !assocMap.has(e));
+    if (unknown.length) sendHelper({ c: 'assoc', exts: unknown });
+  } catch (_) {}
+}
+setInterval(refreshRecent, 60000);
+function recentFor(exe) {
+  exe = String(exe || '').toLowerCase();
+  if (!exe) return [];
+  const seen = new Set();
+  return recentFiles.filter(r => assocMap.get(r.ext) === exe && !seen.has(r.path.toLowerCase()) && seen.add(r.path.toLowerCase()) && fs.existsSync(r.path)).slice(0, 6);
+}
+
 // ---------- Rechtsklick-Menüs wie in der Taskleiste von Windows ----------
 function startTarget(target) {   // nur feste Ziele aus diesem Programm, keine Eingaben von außen
   if (/^ms-settings:/.test(target)) { shell.openExternal(target).catch(() => {}); return; }
@@ -645,6 +684,12 @@ function appMenuTemplate(kind, i) {
   const a = (kind === 'pin' ? lastApps.pins : lastApps.others)[i];
   if (!a) return [];
   const file = appFile(kind, i), running = a.wins.length > 0, items = [];
+  const recent = /\.exe$/i.test(file) ? recentFor(file) : [];
+  if (recent.length) {
+    items.push({ label: 'Zuletzt geöffnet', enabled: false });
+    recent.forEach(r => items.push({ label: path.win32.basename(r.path), click: () => { try { spawn(file, [r.path], { detached: true, stdio: 'ignore' }).unref(); } catch (_) { shell.openPath(r.path); } } }));
+    items.push({ type: 'separator' });
+  }
   items.push({ label: a.name || 'Programm', enabled: false });
   items.push({ label: running ? 'Neues Fenster öffnen' : 'Starten', click: () => launchNew(kind, i) });
   if (file && /\.exe$/i.test(file)) items.push({ label: 'Als Administrator ausführen', click: () => startAdmin(file) });
@@ -715,12 +760,38 @@ ipcMain.on('app-menu', (_e, { kind, i }) => popupMenu(appMenuTemplate(kind, i)))
 ipcMain.on('start-menu', () => popupMenu(startMenuTemplate()));
 ipcMain.on('island-menu', () => popupMenu(islandMenuTemplate()));
 ipcMain.on('app-new', (_e, { kind, i }) => launchNew(kind, i));
+// Dateien auf ein Programm-Symbol gezogen: mit diesem Programm öffnen
+ipcMain.on('open-with', (_e, { kind, i, paths }) => {
+  const files = (paths || []).map(String).filter(p => p && fs.existsSync(p)).slice(0, 20);
+  if (!files.length) return;
+  const file = appFile(kind, i);
+  if (/\.exe$/i.test(file)) { try { spawn(file, files, { detached: true, stdio: 'ignore' }).unref(); return; } catch (_) {} }
+  files.forEach(f => shell.openPath(f));
+});
+// Vorschau aller Fenster eines Programms
+ipcMain.handle('win-thumbs', async (_e, { kind, i }) => {
+  const a = (kind === 'pin' ? lastApps.pins : lastApps.others)[i];
+  if (!a || !a.wins.length) return [];
+  const one = h => new Promise(resolve => {
+    if (!helper) return resolve('');
+    const t = setTimeout(() => { thumbWait.delete(h); resolve(''); }, 1500);
+    thumbWait.set(h, data => { clearTimeout(t); resolve(data); });
+    sendHelper({ c: 'winthumb', h });
+  });
+  const out = [];
+  for (const h of a.wins.slice(0, 6)) { const w = lastWindows.find(x => x.h === h); out.push({ h, title: w ? w.title : a.name, data: await one(h) }); }
+  return out;
+});
+ipcMain.on('win-activate', (_e, h) => { if (lastWindows.some(w => w.h === h)) sendHelper({ c: 'activate', h }); });
+ipcMain.on('win-close', (_e, h) => { if (lastWindows.some(w => w.h === h)) sendHelper({ c: 'close', h: [h] }); });
 if (process.env.INSEL_SHOT) {
   global.inselMenus = () => ({ app: appMenuTemplate, start: startMenuTemplate, island: islandMenuTemplate });
   global.inselWins = () => lastWindows;
   global.inselApps = () => lastApps;
   global.inselTray = () => lastTray;
   global.inselStartApps = () => startApps;
+  global.inselTaskInfo = () => taskInfo;
+  global.inselRefreshRecent = refreshRecent;
   global.inselHelper = cmd => sendHelper(cmd);
 }
 ipcMain.on('pin-add', async () => {
@@ -803,6 +874,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.whenReady().then(() => {
     loadCfg(); createWindow(); startHelper(); loadStartApps(); initUpdates(); applyMicKey();
+    setTimeout(refreshRecent, 3000);
     if (cfg.autoHide) setHidden(true);
     // Notausgang: Strg+Umschalt+F12 beendet die Insel immer und holt die alte Taskleiste zurück.
     try { globalShortcut.register('Control+Shift+F12', () => { cleanup(); setTimeout(() => app.exit(0), 900); }); } catch (_) {}

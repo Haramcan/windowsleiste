@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('insel', {
   ready: () => ipcRenderer.invoke('ready'),
@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('insel', {
   appClick: (kind, i) => ipcRenderer.send('app-click', { kind, i }),
   appMenu: (kind, i) => ipcRenderer.send('app-menu', { kind, i }),
   appNew: (kind, i) => ipcRenderer.send('app-new', { kind, i }),
+  openWith: (kind, i, files) => ipcRenderer.send('open-with', { kind, i, paths: Array.from(files || []).map(f => { try { return webUtils.getPathForFile(f); } catch (_) { return ''; } }).filter(Boolean) }),
+  winThumbs: (kind, i) => ipcRenderer.invoke('win-thumbs', { kind, i }),
+  winActivate: h => ipcRenderer.send('win-activate', h),
+  winClose: h => ipcRenderer.send('win-close', h),
   startMenu: () => ipcRenderer.send('start-menu'),
   islandMenu: () => ipcRenderer.send('island-menu'),
   pinAdd: () => ipcRenderer.send('pin-add'),

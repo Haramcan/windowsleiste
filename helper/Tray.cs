@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using ManagedShell;
 using ManagedShell.Common.Helpers;
 using ManagedShell.WindowsTray;
+using ManagedShell.WindowsTasks;
 
 namespace InselHelper;
 
@@ -17,7 +18,7 @@ internal static class Tray
 {
     private static ShellManager? shell;
     private static Dispatcher? dispatcher;
-    private static string last = "";
+    private static string last = "", lastTasks = "";
     private static readonly Dictionary<object, string> iconCache = new();
 
     [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
@@ -57,9 +58,22 @@ internal static class Tray
             .Select(i => new { id = Key(i), title = i.Title ?? "", icon = Png(i.Icon) })
             .ToList();
         var state = JsonSerializer.Serialize(icons);
-        if (state == last) return;
-        last = state;
-        emit(new { t = "tray", ok = true, icons });
+        if (state != last) { last = state; emit(new { t = "tray", ok = true, icons }); }
+
+        // Was Programme ihrem Taskleisten-Symbol melden: Fortschritt (Download), Zähler (ungelesen), Aufmerksamkeit (blinkt)
+        var tasks = new List<object>();
+        if (shell.Tasks != null)
+            foreach (var o in shell.Tasks.GroupedWindows)
+            {
+                if (o is not ApplicationWindow w) continue;
+                int prog = (int)w.ProgressState;
+                bool flash = w.State == ApplicationWindow.WindowState.Flashing;
+                string badge = w.OverlayIcon != null ? Png(w.OverlayIcon) : "";
+                if (prog == 0 && !flash && badge.Length == 0) continue;
+                tasks.Add(new { h = w.Handle.ToInt64(), prog, val = Math.Clamp(w.ProgressValue, 0, 100), flash, badge, badgeText = w.OverlayIconDescription ?? "" });
+            }
+        var ts = JsonSerializer.Serialize(tasks);
+        if (ts != lastTasks) { lastTasks = ts; emit(new { t = "taskinfo", list = tasks }); }
     }
 
     private static string Png(System.Windows.Media.ImageSource? src)

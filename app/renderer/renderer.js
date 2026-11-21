@@ -40,14 +40,15 @@
     if ((state === 'idle' || state === 'vol') && !drag) { clearTimeout(volT); setState('hub'); }
   });
   island.addEventListener('mouseleave', e => {
+    if (e.relatedTarget && document.getElementById('peek').contains(e.relatedTarget)) return;
     hover = false;
     if (drag || e.buttons) return;
     api.ignore(true); scheduleClose();
   });
-  let menuOpen = false;   // Rechtsklick-Menü offen: Insel bleibt aufgeklappt
+  let menuOpen = false, peekHover = false;   // Rechtsklick-Menü offen: Insel bleibt aufgeklappt
   function scheduleClose() {
     clearTimeout(leaveT);
-    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !sticky(state) && !hover && !menuOpen) setState('idle'); }, 450);
+    leaveT = setTimeout(() => { if (state !== 'toast' && state !== 'vol' && !sticky(state) && !hover && !menuOpen && !peekHover) setState('idle'); }, 450);
   }
   island.addEventListener('click', e => { if (Date.now() - dragEnd < 250) { e.stopPropagation(); e.preventDefault(); } }, true);
   island.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) setState(g.dataset.go); });
@@ -160,12 +161,16 @@
   // ---------- Programme ----------
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function appBtn(a, kind, i) {
-    const cls = 'app' + (a.active ? ' running active' : a.wins.length ? ' running' : '');
+    const cls = 'app' + (a.active ? ' running active' : a.wins.length ? ' running' : '') + (a.flash ? ' flash' : '');
     const pic = a.icon ? '<img src="' + esc(a.icon) + '" alt="">' : '<span class="letter">' + esc((a.name || '?').charAt(0).toUpperCase()) + '</span>';
-    return '<button class="' + cls + '" data-kind="' + kind + '" data-i="' + i + '" title="' + esc(a.name) + '">' + pic + '</button>';
+    const extra = (a.prog > 0 ? '<span class="prog p' + a.prog + '"><i style="width:' + Math.max(4, a.val) + '%"></i></span>' : '') +
+      (a.badge ? '<img class="badge" src="' + esc(a.badge) + '" alt="">' : '');
+    const tip = a.name + (a.badgeText ? ' – ' + a.badgeText : '') + (a.prog > 0 && a.prog !== 1 ? ' – ' + a.val + ' %' : '');
+    return '<button class="' + cls + '" data-kind="' + kind + '" data-i="' + i + '" title="' + esc(tip) + '">' + pic + extra + '</button>';
   }
   let appsHtml = '';
   function renderApps(d) {
+    island.classList.toggle('attention', d.pins.concat(d.others).some(a => a.flash));
     const start = '<button class="app" data-start title="Start"><svg width="22" height="22" viewBox="0 0 22 22" fill="var(--accent)"><rect x="3" y="3" width="7.5" height="7.5" rx="1"/><rect x="11.5" y="3" width="7.5" height="7.5" rx="1"/><rect x="3" y="11.5" width="7.5" height="7.5" rx="1"/><rect x="11.5" y="11.5" width="7.5" height="7.5" rx="1"/></svg></button>';
     const add = '<button class="app add" data-add title="Programm oder Spiel anheften"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button>';
     const sep = '<span class="sep"></span>';
@@ -316,32 +321,76 @@
   $('#bDay').addEventListener('click', calNow);
   calNow();
 
-  // ---------- Vorschau eines Fensters beim Überfahren eines Programms ----------
+  // ---------- Vorschau aller Fenster eines Programms (anklicken zum Wechseln, Kreuz zum Schließen) ----------
   const peek = $('#peek');
-  let peekT = null, peekFor = null;
-  function hidePeek() { clearTimeout(peekT); peekFor = null; peek.classList.remove('on'); }
+  let peekT = null, peekFor = null, peekHideT = null, peekKey = '';
+  function hidePeek() { clearTimeout(peekT); clearTimeout(peekHideT); peekFor = null; peekKey = ''; peek.classList.remove('on'); peekHover = false; }
+  function hidePeekSoon() { clearTimeout(peekHideT); peekHideT = setTimeout(() => { if (!peekHover) hidePeek(); }, 350); }
+  function placePeek(b, below) {
+    const r = b.getBoundingClientRect(), ir = island.getBoundingClientRect(), vw = document.documentElement.clientWidth, w = peek.offsetWidth;
+    peek.style.left = Math.max(8, Math.min(vw - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    if (below) { peek.style.bottom = ''; peek.style.top = (ir.bottom + 6) + 'px'; }
+    else { peek.style.top = ''; peek.style.bottom = (document.documentElement.clientHeight - (island.dataset.anchor === 'bottom' ? ir.top : r.top) + 6) + 'px'; }
+  }
   ['#apps', '#sApps'].forEach(sel => {
     $(sel).addEventListener('mouseover', e => {
       const b = e.target.closest('.app.running');
-      if (!b) return hidePeek();
+      if (!b) return;
+      clearTimeout(peekHideT);
       if (peekFor === b) return;
-      hidePeek(); peekFor = b;
+      clearTimeout(peekT); peekFor = b;
       peekT = setTimeout(async () => {
-        const info = await api.winThumb(b.dataset.kind, +b.dataset.i);
-        if (peekFor !== b || !info || drag) return;
-        $('#peekTitle').textContent = info.title || '';
-        $('#peekImg').hidden = !info.data; if (info.data) $('#peekImg').src = info.data;
-        $('#peekMore').textContent = info.count > 1 ? '+ ' + (info.count - 1) + ' weitere Fenster' : (info.data ? '' : 'Fenster ist minimiert');
-        // unter der Insel (oder darüber, wenn sie unten sitzt), mittig unter dem Symbol
-        const r = b.getBoundingClientRect(), ir = island.getBoundingClientRect(), vw = document.documentElement.clientWidth;
-        peek.style.left = Math.max(8, Math.min(vw - 308, r.left + r.width / 2 - 150)) + 'px';
-        if (island.dataset.anchor === 'bottom') { peek.style.top = ''; peek.style.bottom = (document.documentElement.clientHeight - ir.top + 8) + 'px'; }
-        else { peek.style.bottom = ''; peek.style.top = (ir.bottom + 8) + 'px'; }
+        const list = await api.winThumbs(b.dataset.kind, +b.dataset.i);
+        if (peekFor !== b || !list || !list.length || drag) return;
+        peekKey = b.dataset.kind + b.dataset.i;
+        peek.innerHTML = list.map(w => '<div class="pc" data-h="' + w.h + '"><p>' + esc(w.title || '') + '</p>' +
+          (w.data ? '<img src="' + esc(w.data) + '" alt="">' : '<div class="none">Minimiert</div>') +
+          '<button class="x" data-x="' + w.h + '" title="Fenster schließen"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2L2 8"/></svg></button></div>').join('');
+        placePeek(b, sel === '#apps' && island.dataset.anchor !== 'bottom');
         peek.classList.add('on');
       }, 380);
     });
-    $(sel).addEventListener('mouseleave', hidePeek);
+    $(sel).addEventListener('mouseleave', hidePeekSoon);
     $(sel).addEventListener('mousedown', hidePeek);
+  });
+  peek.addEventListener('mouseenter', () => { peekHover = true; hover = true; clearTimeout(peekHideT); clearTimeout(leaveT); api.ignore(false); });
+  peek.addEventListener('mouseleave', e => {
+    peekHover = false;
+    if (e.relatedTarget && island.contains(e.relatedTarget)) return hidePeekSoon();
+    hidePeekSoon(); hover = false; api.ignore(true); scheduleClose();
+  });
+  peek.addEventListener('click', e => {
+    const x = e.target.closest('[data-x]');
+    if (x) {
+      api.winClose(+x.dataset.x);
+      const card = x.closest('.pc'); if (card) card.remove();
+      if (!peek.querySelector('.pc')) hidePeek();
+      return;
+    }
+    const c = e.target.closest('[data-h]');
+    if (c) { api.winActivate(+c.dataset.h); hidePeek(); setState('idle'); }
+  });
+
+  // ---------- Dateien auf ein Programm ziehen: damit öffnen ----------
+  document.addEventListener('dragover', e => e.preventDefault());   // sonst würde die Insel die Datei selbst anzeigen
+  document.addEventListener('drop', e => e.preventDefault());
+  island.addEventListener('dragenter', () => { api.ignore(false); clearTimeout(leaveT); if (state === 'idle' || state === 'vol') setState('hub'); });
+  ['#apps', '#sApps'].forEach(sel => {
+    $(sel).addEventListener('dragover', e => {
+      const b = e.target.closest('[data-kind]');
+      $$('.app.drop').forEach(x => { if (x !== b) x.classList.remove('drop'); });
+      if (!b) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; b.classList.add('drop');
+    });
+    $(sel).addEventListener('dragleave', e => { const b = e.target.closest('[data-kind]'); if (b && !b.contains(e.relatedTarget)) b.classList.remove('drop'); });
+    $(sel).addEventListener('drop', e => {
+      const b = e.target.closest('[data-kind]');
+      $$('.app.drop').forEach(x => x.classList.remove('drop'));
+      if (!b || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      api.openWith(b.dataset.kind, +b.dataset.i, e.dataTransfer.files);
+      toast(e.dataTransfer.files.length + (e.dataTransfer.files.length === 1 ? ' Datei wird geöffnet' : ' Dateien werden geöffnet'), 1800);
+    });
   });
   $('#bMic').addEventListener('click', () => api.micToggle());
   $('#bSnip').addEventListener('click', () => { setState('idle'); api.snip(); });

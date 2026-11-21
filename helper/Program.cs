@@ -83,6 +83,26 @@ internal static class Program
             case "tray": Tray.Click(r.GetProperty("id").GetString() ?? "", r.GetProperty("b").GetString() ?? "left"); break;
             case "winkey": WinKey.Enabled = r.GetProperty("on").GetBoolean(); break;
             case "back": WindowList.Back(); break;
+            case "traydiag":   // Fehlersuche: welches Fenster bekommt neue Symbole im Infobereich?
+                {
+                    var top = Native.FindWindow("Shell_TrayWnd", "");
+                    Native.GetWindowThreadProcessId(top, out uint tp);
+                    Emit(new { t = "traydiag", topOurs = tp == (uint)Environment.ProcessId, topPid = tp, ourPid = Environment.ProcessId });
+                }
+                break;
+            case "assoc":   // welches Programm öffnet welche Dateiendung
+                {
+                    var map = new Dictionary<string, string>();
+                    foreach (var e in r.GetProperty("exts").EnumerateArray())
+                    {
+                        var ext = e.GetString() ?? "";
+                        if (ext.Length < 2 || ext.Length > 16) continue;
+                        var sb = new StringBuilder(1024); uint size = 1024;
+                        map[ext] = Native.AssocQueryString(0, 2 /* ASSOCSTR_EXECUTABLE */, ext, null, sb, ref size) == 0 ? sb.ToString() : "";
+                    }
+                    Emit(new { t = "assoc", map });
+                }
+                break;
             case "usage": Emit(new { t = "usage", list = Usage.Read() }); break;
             case "search": FileSearch.Run(r.GetProperty("id").GetInt64(), r.GetProperty("q").GetString() ?? "", Emit); break;
             case "winsearch": WinSearch.Open(r.GetProperty("q").GetString() ?? ""); break;
@@ -646,6 +666,7 @@ internal static class Native
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
     [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)] public static extern int AssocQueryString(uint flags, uint str, string assoc, string? extra, StringBuilder outBuf, ref uint outSize);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, string l, uint flags, uint timeout, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(uint action, uint param, string value, uint flags);
