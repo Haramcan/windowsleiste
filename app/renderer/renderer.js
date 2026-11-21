@@ -480,7 +480,8 @@
   });
   sGrid.addEventListener('click', e => { const b = e.target.closest('[data-si]'); if (b) launch(+b.dataset.si); });
   sList.addEventListener('click', e => { const b = e.target.closest('[data-ri]'); if (b && rows[+b.dataset.ri]) rows[+b.dataset.ri].run(); });
-  sList.addEventListener('mousemove', e => { const b = e.target.closest('[data-ri]'); if (b && +b.dataset.ri !== rsel) { rsel = +b.dataset.ri; markSel(false); } });
+  // Die Enter-Auswahl folgt nur der Tastatur (Pfeiltasten) und steht nach jedem Tippen auf dem ersten Treffer.
+  // Die Maus hebt Zeilen nur hervor: Sonst sprang die Auswahl auf die Zeile unter dem Zeiger, und Enter öffnete das Falsche.
   sList.addEventListener('contextmenu', e => { const b = e.target.closest('[data-ri]'); const r = b && rows[+b.dataset.ri]; if (r && r.path) { e.preventDefault(); api.showFile(r.path); } });
 
   // Ein/Aus: Neu starten und Herunterfahren brauchen einen zweiten Klick.

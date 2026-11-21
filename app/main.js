@@ -701,6 +701,7 @@ if (process.env.INSEL_SHOT) {
   global.inselMenus = () => ({ app: appMenuTemplate, start: startMenuTemplate, island: islandMenuTemplate });
   global.inselWins = () => lastWindows;
   global.inselApps = () => lastApps;
+  global.inselTray = () => lastTray;
   global.inselHelper = cmd => sendHelper(cmd);
 }
 ipcMain.on('pin-add', async () => {

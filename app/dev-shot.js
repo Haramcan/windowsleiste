@@ -108,6 +108,29 @@ module.exports = win => {
           for (let k = 0; k < 10 && !gone; k++) { await wait(500); gone = !global.inselWins().some(w => w.h === note.h); }
           log2('Task beenden: ' + (gone ? 'Editor beendet' : 'Editor läuft noch'));
         }
+        // Infobereich: ein Testprogramm legt ein Symbol an, ändert danach seinen Text (wie Discord) und schreibt jeden Klick mit
+        const trayFile = path.join(out, 'tray.txt'), ps1 = path.join(out, 'trayicon.ps1');
+        fs.writeFileSync(ps1, [
+          'Add-Type -AssemblyName System.Windows.Forms, System.Drawing',
+          '$n = New-Object System.Windows.Forms.NotifyIcon',
+          '$n.Icon = [System.Drawing.SystemIcons]::Information; $n.Text = "InselTest"; $n.Visible = $true',
+          '$n.add_MouseClick({ param($s, $e) Add-Content -Path $env:INSEL_TRAYFILE -Value ([string]$e.Button) })',
+          '$t1 = New-Object System.Windows.Forms.Timer; $t1.Interval = 4000; $t1.add_Tick({ $n.Text = "InselTest 2 neue"; $t1.Stop() }); $t1.Start()',
+          '$t2 = New-Object System.Windows.Forms.Timer; $t2.Interval = 45000; $t2.add_Tick({ $n.Visible = $false; [System.Windows.Forms.Application]::Exit() }); $t2.Start()',
+          '[System.Windows.Forms.Application]::Run()'].join('\r\n'));
+        require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', ps1], { env: Object.assign({}, process.env, { INSEL_TRAYFILE: trayFile }), detached: true, stdio: 'ignore', windowsHide: true }).unref();
+        let ti = null;
+        for (let k = 0; k < 30 && !ti; k++) { await wait(500); ti = (global.inselTray().icons || []).find(x => /InselTest/.test(x.title)); }
+        if (!ti) log2('Infobereich: Testsymbol nicht gefunden (' + (global.inselTray().icons || []).map(x => x.title).join(', ') + ')');
+        else {
+          const id = ti.id;   // Kennung von vor der Textänderung
+          await wait(5500);
+          const read = () => { try { return fs.readFileSync(trayFile, 'utf8').trim().split(/\r?\n/).join(','); } catch (_) { return '-'; } };
+          global.inselHelper({ c: 'tray', id, b: 'left' }); await wait(1500);
+          const l = read();
+          global.inselHelper({ c: 'tray', id, b: 'right' }); await wait(1500);
+          log2('Infobereich: links=' + l + ' danach=' + read());
+        }
       } catch (e) { log2('Fehler ' + e.message); }
     }
     // Suche im Menü (das Menü ist nach der Bilderreihe offen)

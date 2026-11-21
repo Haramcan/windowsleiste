@@ -38,7 +38,10 @@ Eine schwebende Insel als Ersatz für die Windows-Taskleiste: klein, solange du 
 - **Maus drüber:** Insel geht auf. **Maus weg:** Insel klappt zu.
 - **Ziehen** mit gedrückter Maustaste verschiebt die Insel.
 - **Plus:** Programm, Verknüpfung oder Spiel anheften.
-- **Rechtsklick** auf ein Symbol: anheften oder wieder lösen.
+- **Rechtsklick auf ein Programm:** neues Fenster, als Administrator, Speicherort, anheften/lösen, Fenster schließen, **Task beenden**, Task-Manager.
+- **Rechtsklick auf den Start-Knopf:** wie Win+X (Geräte-Manager, Terminal, Ausführen, Herunterfahren …).
+- **Rechtsklick auf die Insel:** Task-Manager, Desktop anzeigen, Schnelleinstellungen, Mitteilungszentrale.
+- **Umschalt+Klick** oder **mittlere Maustaste:** neues Fenster. Mehrere Fenster: jeder Klick schaltet weiter.
 - **Regler:** Lautstärke, Ton und Mikrofon stumm, Lautstärke pro Programm.
 - **Einstellungen:** Position, Durchsichtig, Taskleiste, Autostart, Windows-Taste, Aussehen, Widgets, Mitteilungen, Update, Insel beenden.
 

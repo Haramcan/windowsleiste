@@ -66,6 +66,7 @@ jobs:
           grep '^suche' shots/helper.log || true
           grep '^menü' shots/helper.log || true
           grep -q '^menü: Task beenden: Editor beendet' shots/helper.log
+          grep -q '^menü: Infobereich: links=Left danach=Left,Right' shots/helper.log
           grep -q '^menü: App: .*Task beenden (erzwingen) | Task-Manager' shots/helper.log
           grep -q '^menü: Start: .*Geräte-Manager.*Task-Manager.*Ausführen' shots/helper.log
           grep -q '^menü: Insel: Task-Manager | Desktop anzeigen' shots/helper.log

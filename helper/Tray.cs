@@ -54,7 +54,7 @@ internal static class Tray
     {
         var icons = shell!.NotificationArea.TrayIcons
             .Where(i => !i.IsHidden)
-            .Select(i => new { id = i.Identifier, title = i.Title ?? "", icon = Png(i.Icon) })
+            .Select(i => new { id = Key(i), title = i.Title ?? "", icon = Png(i.Icon) })
             .ToList();
         var state = JsonSerializer.Serialize(icons);
         if (state == last) return;
@@ -82,12 +82,22 @@ internal static class Tray
     }
 
     // Klick auf ein Symbol weitergeben; das Programm öffnet dann sein Fenster oder Menü an der Mausposition.
+    // Kennung, die sich nicht ändert, solange das Programm läuft. (Die eingebaute hängt am Tooltip-Text,
+    // der sich bei Discord, Steam usw. ständig ändert – dann lief ein Klick ins Leere.)
+    private static string Key(NotifyIcon i) => i.GUID != Guid.Empty ? i.GUID.ToString() : i.HWnd.ToInt64() + ":" + i.UID;
+
+    [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(int pid);
+
     public static void Click(string id, string button)
     {
+        // Ein unbelegter Tastendruck gibt diesem Programm das Recht, ein anderes nach vorn zu lassen;
+        // ohne das darf das angeklickte Programm sein Fenster oder Menü nicht öffnen.
+        Native.keybd_event(0xFF, 0, 0, UIntPtr.Zero); Native.keybd_event(0xFF, 0, 2, UIntPtr.Zero);
         dispatcher?.InvokeAsync(() =>
         {
-            var icon = shell?.NotificationArea.TrayIcons.FirstOrDefault(i => i.Identifier == id);
+            var icon = shell?.NotificationArea.TrayIcons.FirstOrDefault(i => Key(i) == id);
             if (icon == null) return;
+            AllowSetForegroundWindow(-1);
             var b = button == "right" ? MouseButton.Right : MouseButton.Left;
             uint mouse = MouseHelper.GetCursorPositionParam();
             int dbl = (int)GetDoubleClickTime();
